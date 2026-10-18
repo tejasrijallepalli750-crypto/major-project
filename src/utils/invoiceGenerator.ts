@@ -1,0 +1,173 @@
+import { jsPDF } from 'jspdf';
+import { Order } from '../types';
+
+export const generateInvoicePDF = (order: Order) => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header / Brand
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(22);
+  doc.setTextColor(15, 23, 42); // slate-900
+  doc.text('AURA RETAIL', 20, y);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139); // slate-500
+  doc.text('Aura Technologies Pvt. Ltd.', 20, y + 6);
+  doc.text('GSTIN: 29AAAAA0000A1Z5 | PAN: AAAAA0000A', 20, y + 11);
+  doc.text('Bengaluru, Karnataka 560100, India', 20, y + 16);
+
+  // Invoice / Bill Title (Right aligned)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(15, 23, 42);
+  doc.text('TAX INVOICE', pageWidth - 20, y, { align: 'right' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(`Invoice No: INV-${order.orderNumber.replace('AURA-', '')}`, pageWidth - 20, y + 6, { align: 'right' });
+  doc.text(`Order No: ${order.orderNumber}`, pageWidth - 20, y + 11, { align: 'right' });
+  doc.text(`Order Date: ${new Date(order.createdAt).toLocaleDateString('en-IN')}`, pageWidth - 20, y + 16, { align: 'right' });
+
+  // Divider Line
+  y += 24;
+  doc.setDrawColor(226, 232, 240); // slate-200
+  doc.setLineWidth(0.5);
+  doc.line(20, y, pageWidth - 20, y);
+
+  // Billing & Shipping Information
+  y += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text('BILL TO / SHIP TO:', 20, y);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(51, 65, 85);
+  doc.text(order.shippingAddress.fullName, 20, y + 6);
+  doc.text(order.shippingAddress.street, 20, y + 11);
+  doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.postalCode}`, 20, y + 16);
+  doc.text(`Phone: ${order.shippingAddress.phone || 'N/A'} | Email: ${order.user.email}`, 20, y + 21);
+
+  // Payment Status Block (Right)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text('PAYMENT DETAILS:', pageWidth - 80, y);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(51, 65, 85);
+  doc.text(`Method: ${order.paymentMethod || 'Razorpay Test Gateway'}`, pageWidth - 80, y + 6);
+  doc.text(`Transaction ID: ${order.paymentResult?.razorpay_payment_id || order.paymentResult?.id || 'TEST_SIMULATED'}`, pageWidth - 80, y + 11);
+  doc.text(`Verification: HMAC-SHA256 Verified`, pageWidth - 80, y + 16);
+
+  // Payment Badge
+  const isPaid = order.isPaid;
+  doc.setFillColor(isPaid ? 240 : 254, isPaid ? 253 : 242, isPaid ? 244 : 242);
+  doc.setDrawColor(isPaid ? 187 : 254, isPaid ? 247 : 202, isPaid ? 208 : 202);
+  doc.roundedRect(pageWidth - 80, y + 20, 50, 7, 1.5, 1.5, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(isPaid ? 22 : 185, isPaid ? 101 : 28, isPaid ? 52 : 28);
+  doc.text(isPaid ? 'PAYMENT STATUS: PAID' : 'PAYMENT STATUS: PENDING', pageWidth - 55, y + 24.5, { align: 'center' });
+
+  // Table Header
+  y += 38;
+  doc.setFillColor(248, 250, 252); // slate-50
+  doc.rect(20, y, pageWidth - 40, 8, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.line(20, y, pageWidth - 20, y);
+  doc.line(20, y + 8, pageWidth - 20, y + 8);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(71, 85, 105);
+  doc.text('ITEM DESCRIPTION / SKU', 24, y + 5.5);
+  doc.text('QTY', 120, y + 5.5, { align: 'center' });
+  doc.text('UNIT PRICE (INR)', 150, y + 5.5, { align: 'right' });
+  doc.text('AMOUNT (INR)', pageWidth - 24, y + 5.5, { align: 'right' });
+
+  // Table Body Rows
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(30, 41, 59);
+
+  for (const item of order.orderItems) {
+    y += 7;
+    doc.text(item.name.slice(0, 48), 24, y);
+    doc.setTextColor(148, 163, 184);
+    doc.setFontSize(7.5);
+    doc.text(`SKU: ${item.sku || 'N/A'}`, 24, y + 4);
+
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+    doc.text(String(item.quantity), 120, y, { align: 'center' });
+    doc.text(`₹${item.price.toLocaleString('en-IN')}`, 150, y, { align: 'right' });
+    const rowTotal = item.price * item.quantity;
+    doc.text(`₹${rowTotal.toLocaleString('en-IN')}`, pageWidth - 24, y, { align: 'right' });
+
+    y += 4;
+    doc.setDrawColor(241, 245, 249);
+    doc.line(20, y + 2, pageWidth - 20, y + 2);
+  }
+
+  // Summary Totals
+  y += 10;
+  const summaryX = pageWidth - 80;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+
+  doc.text('Subtotal:', summaryX, y);
+  doc.text(`₹${order.itemsPrice.toLocaleString('en-IN')}`, pageWidth - 24, y, { align: 'right' });
+
+  y += 6;
+  doc.text('CGST (9%):', summaryX, y);
+  doc.text(`₹${(order.taxPrice / 2).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
+
+  y += 6;
+  doc.text('SGST (9%):', summaryX, y);
+  doc.text(`₹${(order.taxPrice / 2).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
+
+  y += 6;
+  doc.text('Shipping:', summaryX, y);
+  doc.text(order.shippingPrice === 0 ? 'FREE' : `₹${order.shippingPrice}`, pageWidth - 24, y, { align: 'right' });
+
+  y += 4;
+  doc.setDrawColor(203, 213, 225);
+  doc.line(summaryX - 5, y, pageWidth - 20, y);
+
+  y += 6;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  doc.text('TOTAL AMOUNT:', summaryX, y);
+  doc.text(`₹${order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
+
+  // Footer / Compliance Note
+  y = 265;
+  doc.setDrawColor(226, 232, 240);
+  doc.line(20, y, pageWidth - 20, y);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(148, 163, 184);
+  doc.text('This is a computer-generated tax invoice for B.Tech Major Academic Project demonstration.', 20, y + 6);
+  doc.text('Processed securely via Razorpay Payment Gateway (Test Mode). No physical signature required.', 20, y + 11);
+  doc.text('Thank you for shopping with AURA Retail.', pageWidth - 20, y + 6, { align: 'right' });
+
+  // Save the PDF
+  doc.save(`Invoice_${order.orderNumber}.pdf`);
+};
