@@ -69,6 +69,7 @@ export default function App() {
                 productId={selectedProductId}
                 onBack={() => handleNavigate('catalog')}
                 onCheckout={() => handleNavigate('checkout')}
+                onSelectProduct={(id) => handleNavigate('product-detail', id)}
               />
             )}
 

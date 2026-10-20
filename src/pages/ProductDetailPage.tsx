@@ -8,11 +8,18 @@ interface ProductDetailPageProps {
   productId: string;
   onBack: () => void;
   onCheckout: () => void;
+  onSelectProduct?: (productId: string) => void;
 }
 
-export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId, onBack, onCheckout }) => {
+export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
+  productId,
+  onBack,
+  onCheckout,
+  onSelectProduct,
+}) => {
   const { addToCart } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
+  const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [justAdded, setJustAdded] = useState(false);
@@ -24,6 +31,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId,
       try {
         const res = await api.getProductById(productId);
         setProduct(res.data);
+
+        // Fetch recommendations from same category or overall catalog
+        const recsRes = await api.getProducts({
+          category: res.data?.category,
+          limit: 5,
+        });
+        const filtered = (recsRes.data || []).filter((p: Product) => p.id !== productId).slice(0, 4);
+        setRecommendedProducts(filtered);
       } catch (err) {
         console.error('Failed to load product details', err);
       } finally {
@@ -270,6 +285,74 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId,
           </div>
         </div>
       </div>
+
+      {/* Recommended Products & Customers Also Viewed Section */}
+      {recommendedProducts.length > 0 && (
+        <div className="pt-10 border-t border-slate-200 space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-amber-700">Recommended for you</p>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">Customers Also Viewed</h3>
+            </div>
+            <button
+              onClick={onBack}
+              className="text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
+            >
+              Explore all in {product.category}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {recommendedProducts.map((rec) => (
+              <div
+                key={rec.id}
+                onClick={() => onSelectProduct?.(rec.id)}
+                className="group bg-white rounded-2xl border border-slate-200/90 p-4 hover:shadow-md hover:-translate-y-0.5 transition-all cursor-pointer flex flex-col justify-between"
+              >
+                <div>
+                  <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-3">
+                    <img
+                      src={rec.image}
+                      alt={rec.name}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                    />
+                    <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900 text-white text-[10px] font-bold">
+                      Recommended
+                    </div>
+                  </div>
+                  <p className="text-[11px] font-medium text-slate-500 uppercase">{rec.category}</p>
+                  <h4 className="text-xs font-bold text-slate-900 line-clamp-1 group-hover:text-amber-600 transition-colors mt-0.5">
+                    {rec.name}
+                  </h4>
+                  <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    <span>{rec.rating.toFixed(1)}</span>
+                    <span>({rec.numReviews})</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-extrabold text-slate-900 font-mono">
+                    ₹{rec.price.toLocaleString('en-IN')}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToCart(rec, 1);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                  >
+                    <ShoppingBag className="w-3 h-3" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

@@ -41,11 +41,18 @@ class PersistentDatabase {
       if (fs.existsSync(DB_FILE)) {
         const parsed = JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
         if (parsed.users && parsed.products && parsed.orders) {
-          // Rehydrate only the current live-store schema. Deprecated fields are
-          // intentionally discarded when an older local store is opened.
+          // Rehydrate live-store schema and merge any new products from INITIAL_PRODUCTS
+          const existingIds = new Set((parsed.products as Product[]).map((p) => p.id));
+          const mergedProducts = [...parsed.products];
+          for (const initProd of INITIAL_PRODUCTS) {
+            if (!existingIds.has(initProd.id)) {
+              mergedProducts.push(initProd);
+            }
+          }
+
           this.data = {
             users: parsed.users,
-            products: parsed.products,
+            products: mergedProducts,
             orders: parsed.orders,
             metadata: parsed.metadata || {
               initializedAt: new Date().toISOString(),
