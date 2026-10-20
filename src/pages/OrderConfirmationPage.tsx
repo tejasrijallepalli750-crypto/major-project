@@ -106,8 +106,10 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             <p className="font-bold text-slate-900">{order.shippingAddress.fullName}</p>
             <p>{order.shippingAddress.street}</p>
             <p>
-              {order.shippingAddress.city}, {order.shippingAddress.state} - {order.shippingAddress.postalCode}
+              {order.shippingAddress.city}
+              {order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ''}, {order.shippingAddress.state} - {order.shippingAddress.postalCode}
             </p>
+            <p className="font-medium text-slate-700">{order.shippingAddress.country}</p>
             <p className="text-slate-500">Phone: {order.shippingAddress.phone}</p>
             <p className="text-slate-500">Email: {order.user.email}</p>
           </div>

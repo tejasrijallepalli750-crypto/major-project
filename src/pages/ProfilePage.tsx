@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { User as UserIcon, Phone, MapPin, Lock, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { SearchableSelect } from '../components/SearchableSelect';
+import {
+  COUNTRIES_A_TO_Z,
+  STATES_A_TO_Z,
+  DISTRICTS_A_TO_Z,
+  CITIES_A_TO_Z,
+} from '../data/locationData';
 
 export const ProfilePage: React.FC = () => {
   const { user, updateProfile } = useAuth();
@@ -8,8 +15,10 @@ export const ProfilePage: React.FC = () => {
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [street, setStreet] = useState(user?.address?.street || '');
-  const [city, setCity] = useState(user?.address?.city || '');
-  const [state, setState] = useState(user?.address?.state || '');
+  const [country, setCountry] = useState(user?.address?.country || 'India');
+  const [state, setState] = useState(user?.address?.state || 'Delhi');
+  const [district, setDistrict] = useState(user?.address?.district || 'New Delhi');
+  const [city, setCity] = useState(user?.address?.city || 'Delhi');
   const [postalCode, setPostalCode] = useState(user?.address?.postalCode || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -35,9 +44,10 @@ export const ProfilePage: React.FC = () => {
         address: {
           street,
           city,
+          district,
           state,
           postalCode,
-          country: 'India',
+          country,
         },
         ...(newPassword ? { currentPassword, newPassword } : {}),
       });
@@ -123,33 +133,53 @@ export const ProfilePage: React.FC = () => {
                 value={street}
                 onChange={(e) => setStreet(e.target.value)}
                 className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
+                placeholder="House/Flat No., Building name, Street"
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">City</label>
-              <input
-                type="text"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
+              <SearchableSelect
+                label="Country"
+                value={country}
+                onChange={setCountry}
+                options={COUNTRIES_A_TO_Z}
+                placeholder="Select country from A to Z..."
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">State</label>
-              <input
-                type="text"
+              <SearchableSelect
+                label="State / Province"
                 value={state}
-                onChange={(e) => setState(e.target.value)}
-                className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
+                onChange={setState}
+                options={STATES_A_TO_Z}
+                placeholder="Select state from A to Z..."
               />
             </div>
             <div>
+              <SearchableSelect
+                label="District"
+                value={district}
+                onChange={setDistrict}
+                options={DISTRICTS_A_TO_Z}
+                placeholder="Select district from A to Z..."
+              />
+            </div>
+            <div>
+              <SearchableSelect
+                label="City"
+                value={city}
+                onChange={setCity}
+                options={CITIES_A_TO_Z}
+                placeholder="Select city from A to Z..."
+              />
+            </div>
+            <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">Postal Code (PIN)</label>
               <input
                 type="text"
                 value={postalCode}
                 onChange={(e) => setPostalCode(e.target.value)}
                 className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
+                placeholder="Postal / PIN Code"
               />
             </div>
           </div>

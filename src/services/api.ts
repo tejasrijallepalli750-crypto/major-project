@@ -271,4 +271,60 @@ export const api = {
     const res = await fetch(`${BASE_URL}/system/services-status`);
     return res.json();
   },
+
+  // --- Dataset Management & Directory Sync ---
+  async getDatasetStatus(): Promise<{
+    success: boolean;
+    folderPath: string;
+    filesCount: number;
+    files: Array<{ name: string; size: number; updatedAt: string; type: string }>;
+  }> {
+    const res = await fetch(`${BASE_URL}/dataset/status`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to scan dataset directory');
+    return data;
+  },
+
+  async syncDataset(): Promise<{
+    success: boolean;
+    message: string;
+    importedCount: number;
+    processedFiles: string[];
+    errors?: string[];
+  }> {
+    const res = await fetch(`${BASE_URL}/dataset/sync`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Dataset synchronization failed');
+    return data;
+  },
+
+  async uploadDatasetFile(filename: string, content: string): Promise<{
+    success: boolean;
+    message: string;
+    filename: string;
+    size: number;
+  }> {
+    const res = await fetch(`${BASE_URL}/dataset/upload`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ filename, content }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to upload dataset file');
+    return data;
+  },
+
+  async createSampleDataset(): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE_URL}/dataset/sample`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to create sample dataset');
+    return data;
+  },
 };
+

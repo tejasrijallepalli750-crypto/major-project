@@ -11,6 +11,7 @@ export interface IUserDocument {
   address?: {
     street: string;
     city: string;
+    district?: string;
     state: string;
     postalCode: string;
     country: string;

@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Lock, ShieldCheck, AlertCircle, CreditCard } from 'lucide-react';
+import { ArrowLeft, Lock, ShieldCheck, AlertCircle, CreditCard, User, Phone } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { api } from '../services/api';
 import { Order } from '../types';
 import { RazorpayModal } from '../components/RazorpayModal';
+import { SearchableSelect } from '../components/SearchableSelect';
+import {
+  COUNTRIES_A_TO_Z,
+  STATES_A_TO_Z,
+  DISTRICTS_A_TO_Z,
+  CITIES_A_TO_Z,
+} from '../data/locationData';
 
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -19,11 +26,28 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   const [fullName, setFullName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [street, setStreet] = useState(user?.address?.street || '');
-  const [city, setCity] = useState(user?.address?.city || '');
-  const [state, setState] = useState(user?.address?.state || '');
+  const [country, setCountry] = useState(user?.address?.country || 'India');
+  const [state, setState] = useState(user?.address?.state || 'Delhi');
+  const [district, setDistrict] = useState(user?.address?.district || 'New Delhi');
+  const [city, setCity] = useState(user?.address?.city || 'Delhi');
   const [postalCode, setPostalCode] = useState(user?.address?.postalCode || '');
-  const [country] = useState('India');
   const [paymentMethod, setPaymentMethod] = useState<'Razorpay' | 'Card' | 'UPI'>('Razorpay');
+
+  // Sync with user profile once loaded
+  useEffect(() => {
+    if (user) {
+      if (!fullName && user.name) setFullName(user.name);
+      if (!phone && user.phone) setPhone(user.phone);
+      if (user.address) {
+        if (!street && user.address.street) setStreet(user.address.street);
+        if (user.address.country) setCountry(user.address.country);
+        if (user.address.state) setState(user.address.state);
+        if (user.address.district) setDistrict(user.address.district);
+        if (user.address.city) setCity(user.address.city);
+        if (!postalCode && user.address.postalCode) setPostalCode(user.address.postalCode);
+      }
+    }
+  }, [user]);
 
   // State for order creation & Razorpay modal
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,8 +94,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     setErrorMessage(null);
 
     // Form input validation
-    if (!fullName.trim() || !phone.trim() || !street.trim() || !city.trim() || !postalCode.trim()) {
-      setErrorMessage('Please complete all required shipping and delivery address fields.');
+    if (!fullName.trim() || !phone.trim() || !street.trim() || !city.trim() || !country.trim() || !postalCode.trim()) {
+      setErrorMessage('Please complete all required shipping and delivery address fields (Name, Phone, Street, City, Country, and PIN/Postal Code).');
       return;
     }
 
@@ -104,6 +128,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           phone,
           street,
           city,
+          district,
           state,
           postalCode,
           country,
@@ -170,95 +195,153 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
         <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-8 space-y-6">
           <form onSubmit={handleProceedToPayment} className="space-y-6">
             <div>
-              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4">
-                1. Delivery &amp; Shipping Address
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  1. Delivery &amp; Shipping Details
+                </h2>
+                {user && (
+                  <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Booking for: <strong className="text-slate-700">{user.email}</strong></span>
+                  </span>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Username / Full Name */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Recipient Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900"
-                    placeholder="Enter full name"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Recipient Full Name *
+                    </label>
+                    {user?.name && fullName !== user.name && (
+                      <button
+                        type="button"
+                        onClick={() => setFullName(user.name)}
+                        className="text-[10px] text-slate-500 hover:text-slate-900 underline cursor-pointer"
+                      >
+                        Use account name
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
+                      placeholder="Enter recipient full name"
+                    />
+                  </div>
                 </div>
 
+                {/* Phone Number */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Contact Phone Number *
-                  </label>
-                  <input
-                    type="tel"
-                    required
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900"
-                    placeholder="+91 98765 43210"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Contact Phone Number *
+                    </label>
+                    {user?.phone && phone !== user.phone && (
+                      <button
+                        type="button"
+                        onClick={() => setPhone(user.phone || '')}
+                        className="text-[10px] text-slate-500 hover:text-slate-900 underline cursor-pointer"
+                      >
+                        Use saved phone
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="tel"
+                      required
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
                 </div>
 
+                {/* Street Address */}
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Street Address / Flat / Floor *
+                    Street Address / Flat / Floor / Building *
                   </label>
                   <input
                     type="text"
                     required
                     value={street}
                     onChange={(e) => setStreet(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900"
-                    placeholder="Street name, Apartment, Block"
+                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
+                    placeholder="House/Flat No., Building name, Street name, Area"
                   />
                 </div>
 
+                {/* Country (Selectable from A to Z) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">City *</label>
-                  <input
-                    type="text"
+                  <SearchableSelect
+                    label="Country"
+                    value={country}
+                    onChange={setCountry}
+                    options={COUNTRIES_A_TO_Z}
                     required
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900"
-                    placeholder="City"
+                    placeholder="Search or select country from A to Z..."
+                    helperText="Select from all countries alphabetically"
                   />
                 </div>
 
+                {/* State / Province (Selectable from A to Z) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">State *</label>
-                  <input
-                    type="text"
-                    required
+                  <SearchableSelect
+                    label="State / Province"
                     value={state}
-                    onChange={(e) => setState(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900"
-                    placeholder="State"
+                    onChange={setState}
+                    options={STATES_A_TO_Z}
+                    required
+                    placeholder="Search or select state from A to Z..."
+                    helperText="Select state or province alphabetically"
                   />
                 </div>
 
+                {/* District (Selectable from A to Z) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">PIN / Postal Code *</label>
+                  <SearchableSelect
+                    label="District"
+                    value={district}
+                    onChange={setDistrict}
+                    options={DISTRICTS_A_TO_Z}
+                    placeholder="Search or select district from A to Z..."
+                    helperText="All major districts sorted alphabetically"
+                  />
+                </div>
+
+                {/* City (Selectable from A to Z) */}
+                <div>
+                  <SearchableSelect
+                    label="City"
+                    value={city}
+                    onChange={setCity}
+                    options={CITIES_A_TO_Z}
+                    required
+                    placeholder="Search or select city from A to Z..."
+                    helperText="Cities sorted alphabetically from A to Z"
+                  />
+                </div>
+
+                {/* Postal Code (PIN) */}
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    PIN / Postal / Zip Code *
+                  </label>
                   <input
                     type="text"
                     required
                     value={postalCode}
                     onChange={(e) => setPostalCode(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900"
-                    placeholder="6-digit PIN"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Country</label>
-                  <input
-                    type="text"
-                    disabled
-                    value={country}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-slate-500 cursor-not-allowed"
+                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
+                    placeholder="Enter 6-digit PIN code or Postal Code"
                   />
                 </div>
               </div>

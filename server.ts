@@ -10,6 +10,7 @@ import paymentRoutes from './server/routes/paymentRoutes';
 import adminRoutes from './server/routes/adminRoutes';
 import testRoutes from './server/routes/testRoutes';
 import statusRoutes from './server/routes/statusRoutes';
+import datasetRoutes from './server/routes/datasetRoutes';
 import { db } from './server/db/database';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,7 @@ app.use('/api/payment', paymentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/tests', testRoutes);
 app.use('/api/system', statusRoutes);
+app.use('/api/dataset', datasetRoutes);
 
 app.get('/api/health', (_req, res) => {
   const stats = db.getAdminStats();

@@ -55,7 +55,8 @@ export const generateInvoicePDF = (order: Order) => {
   doc.setTextColor(51, 65, 85);
   doc.text(order.shippingAddress.fullName, 20, y + 6);
   doc.text(order.shippingAddress.street, 20, y + 11);
-  doc.text(`${order.shippingAddress.city}, ${order.shippingAddress.state} - ${order.shippingAddress.postalCode}`, 20, y + 16);
+  const locLine = `${order.shippingAddress.city}${order.shippingAddress.district ? `, ${order.shippingAddress.district}` : ''}, ${order.shippingAddress.state} - ${order.shippingAddress.postalCode}, ${order.shippingAddress.country || 'India'}`;
+  doc.text(locLine, 20, y + 16);
   doc.text(`Phone: ${order.shippingAddress.phone || 'N/A'} | Email: ${order.user.email}`, 20, y + 21);
 
   // Payment Status Block (Right)

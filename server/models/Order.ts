@@ -23,6 +23,7 @@ export interface IOrderDocument {
     phone: string;
     street: string;
     city: string;
+    district?: string;
     state: string;
     postalCode: string;
     country: string;

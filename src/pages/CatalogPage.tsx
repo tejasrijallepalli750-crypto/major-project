@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SlidersHorizontal, RefreshCw, X } from 'lucide-react';
+import { Search, SlidersHorizontal, RefreshCw, X, Database, CheckCircle } from 'lucide-react';
 import { Product } from '../types';
 import { api } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
 
 interface CatalogPageProps {
@@ -10,12 +11,15 @@ interface CatalogPageProps {
 }
 
 export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSelectProduct }) => {
+  const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ name: string; count: number }[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   const fetchProducts = async () => {
     setIsLoading(true);
@@ -57,13 +61,55 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSel
     setSortBy('newest');
   };
 
+  const handleDatasetSync = async () => {
+    setIsSyncing(true);
+    setSyncToast(null);
+    try {
+      const res = await api.syncDataset();
+      setSyncToast(res.message || `Synced ${res.importedCount} products from /dataset`);
+      fetchProducts();
+      setTimeout(() => setSyncToast(null), 5000);
+    } catch (err: any) {
+      setSyncToast('Failed to sync dataset: ' + err.message);
+      setTimeout(() => setSyncToast(null), 5000);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Toast Notification */}
+      {syncToast && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between shadow-xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{syncToast}</span>
+          </div>
+          <button onClick={() => setSyncToast(null)} className="text-slate-400 hover:text-slate-600">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Page Title & Search Bar */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
-          <div className="text-xs uppercase font-semibold tracking-wider text-slate-500 mb-1">
-            AURA collection
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs uppercase font-semibold tracking-wider text-slate-500">
+              AURA collection
+            </span>
+            {user?.role === 'admin' && (
+              <button
+                onClick={handleDatasetSync}
+                disabled={isSyncing}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50"
+                title="Sync products from /dataset folder into catalog"
+              >
+                <Database className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'Syncing /dataset...' : '⚡ Sync from /dataset'}</span>
+              </button>
+            )}
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
             Explore All Products
