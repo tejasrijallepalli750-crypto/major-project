@@ -115,7 +115,13 @@ router.put('/profile', requireAuth, (req: AuthenticatedRequest, res: Response) =
     const updates: Partial<typeof req.user> = {};
 
     if (name) updates.name = name.trim();
-    if (phone !== undefined) updates.phone = phone.trim();
+    if (phone !== undefined) {
+      const cleanPhone = phone.trim().replace(/\D/g, '');
+      if (cleanPhone && cleanPhone.length !== 10) {
+        return res.status(400).json({ success: false, message: 'Phone number must be exactly 10 digits.' });
+      }
+      updates.phone = cleanPhone;
+    }
     if (address) updates.address = address;
 
     if (newPassword) {

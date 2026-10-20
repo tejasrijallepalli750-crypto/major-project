@@ -102,6 +102,11 @@ router.post('/', requireAuth, (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Please provide complete delivery shipping address information.' });
     }
 
+    const cleanPhone = (shippingAddress.phone || '').replace(/\D/g, '');
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Contact phone number must be exactly 10 digits.' });
+    }
+
     // STRICT SERVER-SIDE RE-VERIFICATION OF ALL ITEMS AND PRICING
     let itemsPrice = 0;
     const verifiedOrderItems = [];

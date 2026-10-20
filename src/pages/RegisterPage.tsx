@@ -24,9 +24,19 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate }) => {
       return;
     }
 
+    if (phone.trim()) {
+      const cleanDigits = phone.replace(/\D/g, '');
+      if (cleanDigits.length !== 10) {
+        setErrorMessage(
+          `Phone number must be exactly 10 digits. You entered ${cleanDigits.length} digit${cleanDigits.length === 1 ? '' : 's'}.`
+        );
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
-      await register({ name, email, password, phone });
+      await register({ name, email, password, phone: phone.trim() ? phone.replace(/\D/g, '').slice(0, 10) : '' });
       onNavigate('catalog');
     } catch (err: any) {
       setErrorMessage(err.message || 'Registration failed.');
@@ -93,13 +103,26 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate }) => {
             <div className="relative">
               <input
                 type="tel"
+                maxLength={10}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 98765 43210"
-                className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg pl-9 focus:ring-1 focus:ring-slate-900"
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                placeholder="10-digit mobile number"
+                className={`w-full text-xs px-3 py-2.5 bg-slate-50 border rounded-lg pl-9 focus:ring-1 ${
+                  phone && phone.replace(/\D/g, '').length !== 10
+                    ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                    : 'border-slate-300 focus:ring-slate-900'
+                }`}
               />
               <Phone className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
+            {phone && phone.replace(/\D/g, '').length !== 10 && (
+              <p className="text-[11px] text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  Phone number must be exactly 10 digits ({phone.replace(/\D/g, '').length}/10 entered).
+                </span>
+              </p>
+            )}
           </div>
 
           <div>

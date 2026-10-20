@@ -1,17 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Lock, ShieldCheck, AlertCircle, CreditCard, User, Phone } from 'lucide-react';
+import { ArrowLeft, Lock, ShieldCheck, AlertCircle, CreditCard, User, Phone, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { api } from '../services/api';
 import { Order } from '../types';
 import { RazorpayModal } from '../components/RazorpayModal';
-import { SearchableSelect } from '../components/SearchableSelect';
-import {
-  COUNTRIES_A_TO_Z,
-  STATES_A_TO_Z,
-  DISTRICTS_A_TO_Z,
-  CITIES_A_TO_Z,
-} from '../data/locationData';
+import { StateSelectModal } from '../components/StateSelectModal';
 
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -22,27 +16,38 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   const { user } = useAuth();
   const { cart, itemsPrice, shippingPrice, taxPrice, totalPrice, clearCart } = useCart();
 
-  // Delivery Address Form State
-  const [fullName, setFullName] = useState(user?.name || '');
+  // Delivery Address Form State (Matching Indian e-commerce layout from video)
+  const [recipientName, setRecipientName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
-  const [street, setStreet] = useState(user?.address?.street || '');
-  const [country, setCountry] = useState(user?.address?.country || 'India');
-  const [state, setState] = useState(user?.address?.state || 'Delhi');
-  const [district, setDistrict] = useState(user?.address?.district || 'New Delhi');
-  const [city, setCity] = useState(user?.address?.city || 'Delhi');
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [houseBuilding, setHouseBuilding] = useState('');
+  const [roadArea, setRoadArea] = useState('');
   const [postalCode, setPostalCode] = useState(user?.address?.postalCode || '');
+  const [city, setCity] = useState(user?.address?.city || '');
+  const [state, setState] = useState(user?.address?.state || 'Andhra Pradesh');
+  const [isStateModalOpen, setIsStateModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'Razorpay' | 'Card' | 'UPI'>('Razorpay');
+
+  const phoneClean = phone.replace(/\D/g, '');
+  const isPhoneValid = phoneClean.length === 10;
+  const phoneError = (phoneTouched || phone.length > 0) && !isPhoneValid;
 
   // Sync with user profile once loaded
   useEffect(() => {
     if (user) {
-      if (!fullName && user.name) setFullName(user.name);
-      if (!phone && user.phone) setPhone(user.phone);
+      if (!recipientName && user.name) setRecipientName(user.name);
+      if (!phone && user.phone) setPhone(user.phone.replace(/\D/g, '').slice(0, 10));
       if (user.address) {
-        if (!street && user.address.street) setStreet(user.address.street);
-        if (user.address.country) setCountry(user.address.country);
+        if (!houseBuilding && !roadArea && user.address.street) {
+          const parts = user.address.street.split(',');
+          if (parts.length > 1) {
+            setHouseBuilding(parts[0].trim());
+            setRoadArea(parts.slice(1).join(',').trim());
+          } else {
+            setRoadArea(user.address.street);
+          }
+        }
         if (user.address.state) setState(user.address.state);
-        if (user.address.district) setDistrict(user.address.district);
         if (user.address.city) setCity(user.address.city);
         if (!postalCode && user.address.postalCode) setPostalCode(user.address.postalCode);
       }
@@ -93,9 +98,32 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     e.preventDefault();
     setErrorMessage(null);
 
-    // Form input validation
-    if (!fullName.trim() || !phone.trim() || !street.trim() || !city.trim() || !country.trim() || !postalCode.trim()) {
-      setErrorMessage('Please complete all required shipping and delivery address fields (Name, Phone, Street, City, Country, and PIN/Postal Code).');
+    // Form input validation matching video fields
+    if (
+      !recipientName.trim() ||
+      !phone.trim() ||
+      !houseBuilding.trim() ||
+      !roadArea.trim() ||
+      !postalCode.trim() ||
+      !state.trim() ||
+      !city.trim()
+    ) {
+      setPhoneTouched(true);
+      setErrorMessage(
+        'Please complete all required delivery address fields (Recipient Name, Contact Phone, House/Building, Road/Area, PIN Code, State, and City).'
+      );
+      return;
+    }
+
+    // Phone number strict 10-digit validation
+    const cleanPhoneDigits = phone.replace(/\D/g, '');
+    if (cleanPhoneDigits.length !== 10) {
+      setPhoneTouched(true);
+      setErrorMessage(
+        cleanPhoneDigits.length === 0
+          ? 'Contact phone number is required and must be 10 digits.'
+          : `Phone number must be exactly 10 digits. You entered ${cleanPhoneDigits.length} digit${cleanPhoneDigits.length === 1 ? '' : 's'}.`
+      );
       return;
     }
 
@@ -108,7 +136,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     try {
       const paymentConfig = await api.getPaymentConfig();
       if (!paymentConfig.isConfigured) {
-        throw new Error('Online payments are not available yet. The store administrator must add Razorpay Test Mode credentials before checkout can be enabled.');
+        throw new Error(
+          'Online payments are not available yet. The store administrator must add Razorpay Test Mode credentials before checkout can be enabled.'
+        );
       }
 
       // 1. Authoritative Backend Validation of Cart & Inventory
@@ -121,17 +151,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
       }
 
       // 2. Create Pending Order on Express Backend
+      const combinedStreet = `${houseBuilding.trim()}, ${roadArea.trim()}`;
       const orderRes = await api.createOrder({
         orderItems: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
         shippingAddress: {
-          fullName,
-          phone,
-          street,
-          city,
-          district,
-          state,
-          postalCode,
-          country,
+          fullName: recipientName.trim(),
+          phone: phone.trim(),
+          street: combinedStreet,
+          city: city.trim(),
+          district: '',
+          state: state.trim(),
+          postalCode: postalCode.trim(),
+          country: 'India',
         },
         paymentMethod,
       });
@@ -197,155 +228,202 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  1. Delivery &amp; Shipping Details
+                  1. Delivery Address
                 </h2>
                 {user && (
                   <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
                     <User className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Booking for: <strong className="text-slate-700">{user.email}</strong></span>
+                    <span>Account: <strong className="text-slate-700">{user.email}</strong></span>
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Username / Full Name */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-700">
-                      Recipient Full Name *
+              <div className="space-y-4">
+                {/* Row 1: Recipient Name and Phone */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Recipient Name */}
+                  <div className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 bg-white transition-all">
+                    <label className="block text-[11px] font-medium text-slate-500">
+                      Recipient Name *
                     </label>
-                    {user?.name && fullName !== user.name && (
-                      <button
-                        type="button"
-                        onClick={() => setFullName(user.name)}
-                        className="text-[10px] text-slate-500 hover:text-slate-900 underline cursor-pointer"
-                      >
-                        Use account name
-                      </button>
+                    <div className="flex items-center justify-between">
+                      <input
+                        type="text"
+                        required
+                        value={recipientName}
+                        onChange={(e) => setRecipientName(e.target.value)}
+                        className="w-full text-sm font-semibold text-slate-900 bg-transparent focus:outline-hidden py-0.5"
+                        placeholder="Enter recipient name"
+                      />
+                      {recipientName.trim().length > 0 && (
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Contact Phone Number */}
+                  <div>
+                    <div
+                      className={`relative border rounded-xl px-3.5 pt-2.5 pb-2 bg-white transition-all ${
+                        phoneError
+                          ? 'border-rose-400 focus-within:border-rose-500 focus-within:ring-1 focus-within:ring-rose-500'
+                          : 'border-slate-300 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600'
+                      }`}
+                    >
+                      <label className="block text-[11px] font-medium text-slate-500">
+                        Contact Phone Number *
+                      </label>
+                      <div className="flex items-center justify-between">
+                        <input
+                          type="tel"
+                          required
+                          maxLength={10}
+                          value={phone}
+                          onChange={(e) => {
+                            const digits = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            setPhone(digits);
+                            setPhoneTouched(true);
+                          }}
+                          onBlur={() => setPhoneTouched(true)}
+                          className="w-full text-sm font-semibold text-slate-900 bg-transparent focus:outline-hidden py-0.5"
+                          placeholder="10-digit mobile number"
+                        />
+                        {isPhoneValid && (
+                          <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                        )}
+                        {phoneError && (
+                          <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 ml-2" />
+                        )}
+                      </div>
+                    </div>
+                    {phoneError && (
+                      <p className="text-[11px] text-rose-600 mt-1 px-1 flex items-center gap-1 font-medium">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {phoneClean.length === 0
+                            ? 'Phone number is required (10 digits)'
+                            : `Phone number must be exactly 10 digits (${phoneClean.length}/10 entered)`}
+                        </span>
+                      </p>
                     )}
                   </div>
-                  <div className="relative">
+                </div>
+
+                {/* Row 2: House No., Building Name */}
+                <div className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 bg-white transition-all">
+                  <label className="block text-[11px] font-medium text-slate-500">
+                    House No., Building Name *
+                  </label>
+                  <div className="flex items-center justify-between">
                     <input
                       type="text"
                       required
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
-                      placeholder="Enter recipient full name"
+                      value={houseBuilding}
+                      onChange={(e) => setHouseBuilding(e.target.value)}
+                      className="w-full text-sm font-semibold text-slate-900 bg-transparent focus:outline-hidden py-0.5"
+                      placeholder="e.g. Flat 302, Green Apartment"
                     />
-                  </div>
-                </div>
-
-                {/* Phone Number */}
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-semibold text-slate-700">
-                      Contact Phone Number *
-                    </label>
-                    {user?.phone && phone !== user.phone && (
-                      <button
-                        type="button"
-                        onClick={() => setPhone(user.phone || '')}
-                        className="text-[10px] text-slate-500 hover:text-slate-900 underline cursor-pointer"
-                      >
-                        Use saved phone
-                      </button>
+                    {houseBuilding.trim().length > 0 && (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
                     )}
                   </div>
-                  <div className="relative">
+                </div>
+
+                {/* Row 3: Road Name, Area, Colony */}
+                <div className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 bg-white transition-all">
+                  <label className="block text-[11px] font-medium text-slate-500">
+                    Road Name, Area, Colony *
+                  </label>
+                  <div className="flex items-center justify-between">
                     <input
-                      type="tel"
+                      type="text"
                       required
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
-                      placeholder="+91 98765 43210"
+                      value={roadArea}
+                      onChange={(e) => setRoadArea(e.target.value)}
+                      className="w-full text-sm font-semibold text-slate-900 bg-transparent focus:outline-hidden py-0.5"
+                      placeholder="e.g. MG Road, Indiranagar"
                     />
+                    {roadArea.trim().length > 0 && (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                    )}
                   </div>
                 </div>
 
-                {/* Street Address */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Street Address / Flat / Floor / Building *
+                {/* Row 4: PIN Code and State (Side-by-side like video) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* PIN Code */}
+                  <div className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 bg-white transition-all">
+                    <label className="block text-[11px] font-medium text-slate-500">
+                      PIN Code *
+                    </label>
+                    <div className="flex items-center justify-between">
+                      <input
+                        type="text"
+                        required
+                        maxLength={6}
+                        value={postalCode}
+                        onChange={(e) => setPostalCode(e.target.value.replace(/\D/g, ''))}
+                        className="w-full text-sm font-semibold text-slate-900 bg-transparent focus:outline-hidden py-0.5"
+                        placeholder="6-digit PIN code"
+                      />
+                      {postalCode.trim().length >= 6 && (
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* State (Click to open state selector sheet matching video) */}
+                  <div
+                    onClick={() => setIsStateModalOpen(true)}
+                    className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 bg-white cursor-pointer hover:border-purple-500 transition-all select-none group"
+                  >
+                    <label className="block text-[11px] font-medium text-slate-500 cursor-pointer">
+                      State *
+                    </label>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-slate-900 truncate py-0.5">
+                        {state || 'Select State'}
+                      </span>
+                      {state ? (
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                      ) : (
+                        <span className="text-xs text-purple-600 font-bold group-hover:underline">
+                          Choose
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Row 5: City */}
+                <div className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 bg-white transition-all">
+                  <label className="block text-[11px] font-medium text-slate-500">
+                    City *
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={street}
-                    onChange={(e) => setStreet(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
-                    placeholder="House/Flat No., Building name, Street name, Area"
-                  />
-                </div>
-
-                {/* Country (Selectable from A to Z) */}
-                <div>
-                  <SearchableSelect
-                    label="Country"
-                    value={country}
-                    onChange={setCountry}
-                    options={COUNTRIES_A_TO_Z}
-                    required
-                    placeholder="Search or select country from A to Z..."
-                    helperText="Select from all countries alphabetically"
-                  />
-                </div>
-
-                {/* State / Province (Selectable from A to Z) */}
-                <div>
-                  <SearchableSelect
-                    label="State / Province"
-                    value={state}
-                    onChange={setState}
-                    options={STATES_A_TO_Z}
-                    required
-                    placeholder="Search or select state from A to Z..."
-                    helperText="Select state or province alphabetically"
-                  />
-                </div>
-
-                {/* District (Selectable from A to Z) */}
-                <div>
-                  <SearchableSelect
-                    label="District"
-                    value={district}
-                    onChange={setDistrict}
-                    options={DISTRICTS_A_TO_Z}
-                    placeholder="Search or select district from A to Z..."
-                    helperText="All major districts sorted alphabetically"
-                  />
-                </div>
-
-                {/* City (Selectable from A to Z) */}
-                <div>
-                  <SearchableSelect
-                    label="City"
-                    value={city}
-                    onChange={setCity}
-                    options={CITIES_A_TO_Z}
-                    required
-                    placeholder="Search or select city from A to Z..."
-                    helperText="Cities sorted alphabetically from A to Z"
-                  />
-                </div>
-
-                {/* Postal Code (PIN) */}
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    PIN / Postal / Zip Code *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={postalCode}
-                    onChange={(e) => setPostalCode(e.target.value)}
-                    className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-1 focus:ring-slate-900 focus:bg-white transition-colors"
-                    placeholder="Enter 6-digit PIN code or Postal Code"
-                  />
+                  <div className="flex items-center justify-between">
+                    <input
+                      type="text"
+                      required
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      className="w-full text-sm font-semibold text-slate-900 bg-transparent focus:outline-hidden py-0.5"
+                      placeholder="e.g. Hyderabad, Bengaluru, Mumbai"
+                    />
+                    {city.trim().length > 0 && (
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 ml-2" />
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* State Select Bottom Sheet Modal */}
+            <StateSelectModal
+              isOpen={isStateModalOpen}
+              onClose={() => setIsStateModalOpen(false)}
+              selectedState={state}
+              onSelectState={(st) => setState(st)}
+            />
 
             {/* Payment Method Selector */}
             <div className="pt-4 border-t border-slate-100">
@@ -386,7 +464,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
             <button
               type="submit"
               disabled={isSubmitting || paymentConfigStatus !== 'configured'}
-              className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              className="w-full py-4 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
             >
               <Lock className="w-4 h-4" />
               <span>
@@ -396,7 +474,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                     ? 'Online payment setup required'
                     : isSubmitting
                       ? 'Verifying cart & creating payment order…'
-                      : `Pay ₹${totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with Razorpay`}
+                      : `Save & Continue · Pay ₹${totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
               </span>
             </button>
           </form>
