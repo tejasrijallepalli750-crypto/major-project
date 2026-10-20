@@ -1,5 +1,5 @@
 /**
- * Mongoose Schema & Types for Products
+ * Document shape for products.
  */
 export interface IProductDocument {
   _id?: string;

@@ -15,18 +15,20 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
-import { KaggleDatasetPage } from './pages/KaggleDatasetPage';
-import { ProjectDocsPage } from './pages/ProjectDocsPage';
 import { Order } from './types';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('home');
   const [selectedProductId, setSelectedProductId] = useState<string>('prod-001');
+  const [catalogCategory, setCatalogCategory] = useState('All');
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
   const handleNavigate = (view: string, param?: string) => {
     if (view === 'product-detail' && param) {
       setSelectedProductId(param);
+    }
+    if (view === 'catalog') {
+      setCatalogCategory(param || 'All');
     }
     setCurrentView(view);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -56,7 +58,10 @@ export default function App() {
             {currentView === 'home' && <HomePage onNavigate={handleNavigate} />}
 
             {currentView === 'catalog' && (
-              <CatalogPage onSelectProduct={(id) => handleNavigate('product-detail', id)} />
+              <CatalogPage
+                initialCategory={catalogCategory}
+                onSelectProduct={(id) => handleNavigate('product-detail', id)}
+              />
             )}
 
             {currentView === 'product-detail' && (
@@ -90,9 +95,6 @@ export default function App() {
 
             {currentView === 'admin' && <AdminDashboard />}
 
-            {currentView === 'kaggle' && <KaggleDatasetPage />}
-
-            {currentView === 'docs' && <ProjectDocsPage />}
           </main>
 
           {/* Quiet Universal Footer */}

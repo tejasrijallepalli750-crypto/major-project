@@ -12,8 +12,7 @@ import {
   RefreshCw,
   Search,
   X,
-  ExternalLink,
-  RotateCcw
+  ExternalLink
 } from 'lucide-react';
 import { api } from '../services/api';
 import { Product, Order } from '../types';
@@ -75,7 +74,7 @@ export const AdminDashboard: React.FC = () => {
       category: 'Electronics',
       stock: 25,
       sku: `SKU-${Date.now().toString().slice(-6)}`,
-      image: '/src/assets/images/product_headphones_matte_1792292817977.jpg',
+      image: '/images/product_headphones_matte_1792292817977.jpg',
       brand: 'AURA Signature',
     });
     setIsProductModalOpen(true);
@@ -134,24 +133,13 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleResetDemoData = async () => {
-    if (!window.confirm('Reset catalog and orders to default factory state?')) return;
-    try {
-      await api.resetDemoData();
-      setMessage({ text: 'Demo database reset to initial catalog and demo orders.', type: 'success' });
-      fetchData();
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to reset demo data', type: 'error' });
-    }
-  };
-
   if (!user || user.role !== 'admin') {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
         <AlertTriangle className="w-12 h-12 text-rose-500 mx-auto" />
         <h2 className="text-xl font-bold text-slate-900">Administrator Access Required</h2>
         <p className="text-xs text-slate-500">
-          This dashboard is protected by server-side Role-Based Access Control (RBAC). Please sign in with an administrator account (e.g., admin@aura.store).
+          This dashboard is protected by server-side role-based access control. Please sign in with an administrator account.
         </p>
       </div>
     );
@@ -169,7 +157,7 @@ export const AdminDashboard: React.FC = () => {
             Store Operations &amp; Inventory
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Full-stack inventory control, order fulfillment, and Razorpay transaction records
+            Manage inventory, fulfil orders, and review payment records
           </p>
         </div>
 
@@ -180,13 +168,6 @@ export const AdminDashboard: React.FC = () => {
             title="Refresh database records"
           >
             <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleResetDemoData}
-            className="px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset Demo DB</span>
           </button>
         </div>
       </div>
@@ -550,7 +531,7 @@ export const AdminDashboard: React.FC = () => {
                       <div>
                         <span>Payment ID: </span>
                         <span className="font-mono text-slate-700">
-                          {order.paymentResult?.razorpay_payment_id || 'TEST_SIMULATED'}
+                          {order.paymentResult?.razorpay_payment_id || 'Not available'}
                         </span>
                       </div>
                       <div>

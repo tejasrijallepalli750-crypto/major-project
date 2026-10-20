@@ -73,7 +73,7 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
           <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto" />
           <h3 className="text-base font-bold text-slate-900">No Orders Placed Yet</h3>
           <p className="text-xs text-slate-500">
-            You haven't placed any orders with AURA Retail yet. Explore our catalog and complete a test purchase with Razorpay.
+            You haven't placed any orders with AURA yet. Explore the collection when you're ready.
           </p>
           <button
             onClick={() => onNavigate('catalog')}

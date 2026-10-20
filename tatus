@@ -1,0 +1,12 @@
+warning: in the working copy of 'PROJECT_MANUAL.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'metadata.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/db/database.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/routes/adminRoutes.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/routes/paymentRoutes.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'server/routes/statusRoutes.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/Footer.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/Navbar.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/RazorpayModal.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/HomePage.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/pages/LoginPage.tsx', LF will be replaced by CRLF the next time Git touches it

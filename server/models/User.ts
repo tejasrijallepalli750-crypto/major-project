@@ -1,6 +1,5 @@
 /**
- * Mongoose Schema & Types for Academic Major Project
- * Compatible with MongoDB Atlas & local MongoDB deployments.
+ * Document shape for future database-adapter integration.
  */
 export interface IUserDocument {
   _id?: string;

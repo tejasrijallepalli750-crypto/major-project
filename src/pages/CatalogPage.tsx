@@ -5,13 +5,14 @@ import { api } from '../services/api';
 import { ProductCard } from '../components/ProductCard';
 
 interface CatalogPageProps {
+  initialCategory: string;
   onSelectProduct: (productId: string) => void;
 }
 
-export const CatalogPage: React.FC<CatalogPageProps> = ({ onSelectProduct }) => {
+export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSelectProduct }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ name: string; count: number }[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -41,6 +42,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onSelectProduct }) => 
     fetchProducts();
   }, [selectedCategory, sortBy]);
 
+  useEffect(() => {
+    setSelectedCategory(initialCategory);
+  }, [initialCategory]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchProducts();
@@ -58,13 +63,13 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onSelectProduct }) => 
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
           <div className="text-xs uppercase font-semibold tracking-wider text-slate-500 mb-1">
-            Storefront Catalog
+            AURA collection
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
             Explore All Products
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Showing {products.length} verified products with real-time inventory and INR pricing
+            Shop {products.length} products across our latest collections
           </p>
         </div>
 
@@ -144,7 +149,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onSelectProduct }) => 
       {isLoading ? (
         <div className="py-20 flex flex-col items-center justify-center text-slate-400">
           <RefreshCw className="w-8 h-8 animate-spin mb-3 text-slate-600" />
-          <p className="text-xs font-medium">Fetching verified catalog from backend...</p>
+          <p className="text-xs font-medium">Loading products...</p>
         </div>
       ) : products.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center max-w-md mx-auto space-y-4">

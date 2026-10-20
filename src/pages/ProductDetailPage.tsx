@@ -47,7 +47,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId,
       <div className="max-w-xl mx-auto px-4 py-20 text-center space-y-4">
         <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
         <h2 className="text-lg font-bold text-slate-900">Product Not Found</h2>
-        <p className="text-xs text-slate-500">The product requested could not be located in our active database.</p>
+        <p className="text-xs text-slate-500">This product may have been removed or is no longer available.</p>
         <button
           onClick={onBack}
           className="px-4 py-2 text-xs font-semibold bg-slate-900 text-white rounded-lg cursor-pointer"
@@ -108,11 +108,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId,
           {/* Technical Specifications Callouts */}
           <div className="mt-6 pt-6 border-t border-slate-100">
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-              Technical Specifications &amp; Features
+              Product Details &amp; Features
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
-                <span className="text-slate-500">Stock Keeping Unit (SKU):</span>
+                <span className="text-slate-500">Product code:</span>
                 <span className="font-mono font-semibold text-slate-800">{product.sku}</span>
               </div>
               <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
@@ -253,7 +253,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId,
               disabled={product.stock === 0}
               className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-40"
             >
-              Instant Checkout with Razorpay
+              Buy now
             </button>
           </div>
 
@@ -265,7 +265,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({ productId,
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-slate-700" />
-              <span>Razorpay test mode verified with HMAC SHA-256 signature</span>
+              <span>Secure payment confirmation and server-side verification</span>
             </div>
           </div>
         </div>

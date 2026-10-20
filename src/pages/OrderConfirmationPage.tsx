@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import confetti from 'canvas-confetti';
-import { CheckCircle, Download, ArrowRight, Package, Clock, ShieldCheck, MapPin } from 'lucide-react';
+import { CheckCircle, Download, ShieldCheck, MapPin } from 'lucide-react';
 import { Order } from '../types';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
 
@@ -37,13 +37,13 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
 
         <div className="space-y-1">
           <span className="text-xs uppercase font-bold tracking-widest text-emerald-700">
-            Payment &amp; Order Verified
+            Order confirmed
           </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
             Thank you for your order!
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
-            Order <span className="font-mono font-bold text-slate-900">{order.orderNumber}</span> has been confirmed and placed with our fulfillment facility.
+            Order <span className="font-mono font-bold text-slate-900">{order.orderNumber}</span> is confirmed. You can follow its status from your account.
           </p>
         </div>
 
@@ -54,7 +54,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>Download Official PDF Invoice</span>
+            <span>Download invoice</span>
           </button>
 
           <button
@@ -72,33 +72,25 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
         <div className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Razorpay Payment Summary</span>
+            <span>Payment Summary</span>
           </div>
 
           <div className="space-y-2 text-xs divide-y divide-slate-100">
             <div className="flex justify-between py-1.5">
-              <span className="text-slate-500">Gateway Status</span>
+              <span className="text-slate-500">Payment status</span>
               <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
                 {order.isPaid ? 'CAPTURED / PAID' : 'PENDING'}
               </span>
             </div>
             <div className="flex justify-between py-1.5">
-              <span className="text-slate-500">Payment ID</span>
+              <span className="text-slate-500">Payment reference</span>
               <span className="font-mono text-slate-800 text-[11px]">
-                {order.paymentResult?.razorpay_payment_id || order.paymentResult?.id || 'TEST_SIMULATED'}
+                {order.paymentResult?.razorpay_payment_id || order.paymentResult?.id || 'Pending'}
               </span>
             </div>
             <div className="flex justify-between py-1.5">
-              <span className="text-slate-500">Razorpay Order ID</span>
-              <span className="font-mono text-slate-800 text-[11px]">
-                {order.paymentResult?.razorpay_order_id || 'N/A'}
-              </span>
-            </div>
-            <div className="flex justify-between py-1.5">
-              <span className="text-slate-500">Cryptographic Digest</span>
-              <span className="font-mono text-slate-600 text-[10px] truncate max-w-[180px]">
-                {order.paymentResult?.razorpay_signature || 'HMAC-SHA256 Server Verified'}
-              </span>
+              <span className="text-slate-500">Payment method</span>
+              <span className="font-semibold text-slate-800">{order.paymentMethod}</span>
             </div>
           </div>
         </div>
@@ -107,7 +99,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
         <div className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
             <MapPin className="w-4 h-4 text-blue-600" />
-            <span>Delivery Destination</span>
+            <span>Delivery address</span>
           </div>
 
           <div className="text-xs text-slate-600 space-y-1">

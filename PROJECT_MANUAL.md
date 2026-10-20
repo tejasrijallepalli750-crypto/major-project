@@ -1,74 +1,39 @@
-# AURA Retail & Payment Gateway
-## Major Academic Project — B.Tech Computer Science Engineering
+# AURA Store
 
-A complete full-stack E-Commerce web application with official Razorpay Payment Gateway integration (Test Mode), MERN architecture (Mongoose schemas & persistent storage), Kaggle Brazilian E-Commerce dataset analytics, Role-Based Access Control (RBAC), and automated GST PDF invoice generation.
+AURA is a full-stack e-commerce application for a curated catalogue of everyday essentials. It includes customer accounts, shopping cart and checkout flows, product and order administration, and invoice downloads.
 
----
+## Included features
 
-### 1. Project Overview & Deliverables
-This project is built according to the university guidelines specified for the B.Tech Major Project:
-1. **Products & Catalog**: 20+ curated demonstration products in INR with technical specifications, high-fidelity photography, and inventory counters.
-2. **Shopping Cart & Checkout**: Dynamic cart with client-side quantity management and authoritative server-side recalculation of prices, stock, and 18% GST.
-3. **Database Architecture**: Mongoose schemas (`User.ts`, `Product.ts`, `Order.ts`) with disk-synchronized document persistence in `./data/aura_database.json` and plug-and-play MongoDB Atlas compatibility via `MONGODB_URI`.
-4. **Authentication & Authorization**: Bcrypt password hashing (salt rounds 10), JWT token generation, role-based protection for Customer vs Administrator endpoints.
-5. **Razorpay Payment Gateway (Test Mode)**:
-   - Order creation (`/api/payment/create-order`)
-   - Interactive checkout modal with test cards (`4111 1111 1111 1111`), UPI (`success@razorpay`), and NetBanking.
-   - Cryptographic signature verification using HMAC-SHA256 (`crypto.createHmac('sha256', secret)`).
-   - Atomic stock decrement upon verified payment.
-   - Rejection of tampered signatures and repeated callbacks.
-6. **Order Confirmation & Invoices**: Instant downloadable PDF tax invoices generated via `jsPDF`, itemizing products, SKUs, GST calculations, and Razorpay transaction IDs.
-7. **Kaggle Brazilian E-Commerce Integration**: Pre-integrated statistical dashboard and one-click catalog importer from Olist's 100k Brazilian dataset.
-8. **Automated Security Test Suite**: Interactive test runner in the Admin/Docs section verifying 10 critical security invariants.
+- Product catalogue with categories, search, sorting, product details, images, stock, and cart
+- Customer registration, login, profile updates, protected order history, and downloadable PDF invoices
+- Role-protected store administration for product management, inventory updates, order fulfilment, and sales summaries
+- Server-side price and stock validation before orders are created
+- Razorpay Test Mode checkout integration and server-side HMAC-SHA256 payment-signature verification
+- Responsive React and Tailwind interface with an Express API and persistent local document storage
 
----
+## Local development
 
-### 2. Quick Evaluation Credentials
-For academic evaluators and project viva demonstration:
+1. Install dependencies with `bun install`.
+2. Copy `.env.example` to `.env`.
+3. Set a long, unique `JWT_SECRET`.
+4. Run `bun run dev`.
 
-| Role | Email | Password | Access Rights |
-| :--- | :--- | :--- | :--- |
-| **Administrator** | `admin@aura.store` | `Admin@123` | Full Admin Console, Inventory CRUD, Order Fulfillment, Dataset Importer |
-| **Customer** | `student@college.edu` | `Customer@123` | Storefront, Shopping Cart, Razorpay Checkout, My Orders, PDF Invoices |
+On a fresh local data store, the application seeds a small sample catalogue and a local administrator account (`admin@aura.store`, password `Admin@123`). Change the administrator password before exposing the application outside local development. Customers can register through the storefront, and administrators can add, edit, or remove products in the protected dashboard.
 
-*Note: One-click demo login buttons are also provided directly on the Sign In page.*
+## Payment setup
 
----
+Razorpay checkout remains disabled until valid Test Mode credentials are supplied. The storefront does not simulate successful payments.
 
-### 3. Technology Stack
-- **Frontend**: React 19, TypeScript, Tailwind CSS, Lucide Icons, jsPDF, Canvas Confetti.
-- **Backend**: Node.js, Express.js REST APIs, tsx runner.
-- **Authentication**: JSON Web Tokens (jsonwebtoken), bcryptjs (salt factor 10).
-- **Payment Gateway**: Razorpay (Test Mode v1 Checkout), Node.js `crypto` for HMAC-SHA256 digests.
-- **Database**: Mongoose Models (`/server/models/`) and persistent document storage with atomic sync.
+To enable Test Mode checkout, set the following server-side values in `.env` and restart the server:
 
----
+```env
+RAZORPAY_KEY_ID=rzp_test_your_key_id
+RAZORPAY_KEY_SECRET=your_test_key_secret
+RAZORPAY_WEBHOOK_SECRET=optional_webhook_secret
+```
 
-### 4. Running the Project Locally in VS Code
-1. Clone the repository and install packages:
-   ```bash
-   npm install
-   ```
-2. Copy environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-3. Start the application:
-   ```bash
-   npm run dev
-   ```
-4. Open your browser at `http://localhost:3000`.
+With valid credentials, the server requests Razorpay orders through Razorpay's API. The browser uses Razorpay Checkout and sends its payment response back to the server. The server marks an order paid only after a constant-time HMAC-SHA256 signature comparison succeeds. Configuring keys alone does not confirm connectivity; complete a successful Test Mode transaction to verify the integration.
 
----
+## Storage
 
-### 5. Deployment Guide
-- **Production Build**:
-  ```bash
-  npm run build
-  npm start
-  ```
-- **Deploy to Render / Railway / Google Cloud Run**:
-  - Environment: Node.js 20+
-  - Build Command: `npm run build`
-  - Start Command: `npm start`
-  - Provide `JWT_SECRET`, `RAZORPAY_KEY_ID`, and `RAZORPAY_KEY_SECRET` in service environment settings.
+The current build uses persistent local storage at `data/aura_database.json`. MongoDB is not connected or used by this build, so no MongoDB credentials are needed. A MongoDB URI alone will not enable MongoDB; a persistence adapter must be implemented first.

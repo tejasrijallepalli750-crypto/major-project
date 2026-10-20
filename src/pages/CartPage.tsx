@@ -175,7 +175,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
           <div className="pt-2 text-[11px] text-slate-400 space-y-1.5">
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>Razorpay Test Gateway Integration</span>
+              <span>Secure checkout</span>
             </div>
             <p>Prices and stock availability will be re-verified on the server before payment initiation.</p>
           </div>

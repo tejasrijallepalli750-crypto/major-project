@@ -1,6 +1,5 @@
 {
-  "name": "AURA Retail & Payment Gateway",
-  "description": "Full-Stack E-Commerce Website with Razorpay Payment Gateway, Olist Kaggle Dataset Integration, Admin Inventory Management, and PDF Invoices.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "name": "AURA Store",
+  "description": "A polished full-stack e-commerce store with customer accounts, catalog management, invoices, and optional Razorpay Test Mode checkout.",
+  "version": "2.0.0"
 }

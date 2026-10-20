@@ -1,5 +1,5 @@
 /**
- * Mongoose Schema & Types for Orders and Payments
+ * Document shape for orders and payments.
  */
 export interface IOrderDocument {
   _id?: string;
@@ -27,6 +27,7 @@ export interface IOrderDocument {
     postalCode: string;
     country: string;
   };
+  razorpayOrderId?: string;
   paymentMethod: string;
   paymentResult?: {
     id: string;
@@ -78,6 +79,7 @@ export const OrderSchemaDefinition = {
     postalCode: { type: 'String', required: true },
     country: { type: 'String', default: 'India' },
   },
+  razorpayOrderId: { type: 'String' },
   paymentMethod: { type: 'String', default: 'Razorpay' },
   paymentResult: {
     id: { type: 'String' },

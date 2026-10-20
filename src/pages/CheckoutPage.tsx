@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Lock, ShieldCheck, AlertCircle, CreditCard } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -16,21 +16,39 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   const { cart, itemsPrice, shippingPrice, taxPrice, totalPrice, clearCart } = useCart();
 
   // Delivery Address Form State
-  const [fullName, setFullName] = useState(user?.name || 'Demo Student Customer');
-  const [phone, setPhone] = useState(user?.phone || '+91 98765 43210');
-  const [street, setStreet] = useState(user?.address?.street || '14 Lake View Residency, Koramangala');
-  const [city, setCity] = useState(user?.address?.city || 'Bengaluru');
-  const [state, setState] = useState(user?.address?.state || 'Karnataka');
-  const [postalCode, setPostalCode] = useState(user?.address?.postalCode || '560034');
+  const [fullName, setFullName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [street, setStreet] = useState(user?.address?.street || '');
+  const [city, setCity] = useState(user?.address?.city || '');
+  const [state, setState] = useState(user?.address?.state || '');
+  const [postalCode, setPostalCode] = useState(user?.address?.postalCode || '');
   const [country] = useState('India');
   const [paymentMethod, setPaymentMethod] = useState<'Razorpay' | 'Card' | 'UPI'>('Razorpay');
 
   // State for order creation & Razorpay modal
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [paymentConfigStatus, setPaymentConfigStatus] = useState<'checking' | 'configured' | 'unavailable'>('checking');
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
-  const [razorpayOrderData, setRazorpayOrderData] = useState<any | null>(null);
+  const [razorpayOrderData, setRazorpayOrderData] = useState<
+    Awaited<ReturnType<typeof api.createPaymentOrder>>['data'] | null
+  >(null);
   const [isRazorpayModalOpen, setIsRazorpayModalOpen] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    api.getPaymentConfig()
+      .then((config) => {
+        if (isCurrent) setPaymentConfigStatus(config.isConfigured ? 'configured' : 'unavailable');
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to check payment configuration', error);
+        if (isCurrent) setPaymentConfigStatus('unavailable');
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
 
   if (cart.length === 0 && !createdOrder) {
     return (
@@ -64,6 +82,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
 
     setIsSubmitting(true);
     try {
+      const paymentConfig = await api.getPaymentConfig();
+      if (!paymentConfig.isConfigured) {
+        throw new Error('Online payments are not available yet. The store administrator must add Razorpay Test Mode credentials before checkout can be enabled.');
+      }
+
       // 1. Authoritative Backend Validation of Cart & Inventory
       const cartValidation = await api.validateCart(
         cart.map((item) => ({ productId: item.productId, quantity: item.quantity }))
@@ -127,10 +150,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
 
       <div className="border-b border-slate-200 pb-4">
         <div className="text-xs uppercase font-semibold tracking-wider text-slate-500 mb-1">
-          Step 2 of 2: Delivery &amp; Payment
+          Secure checkout
         </div>
         <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-          Checkout &amp; Gateway Order
+          Delivery &amp; payment
         </h1>
       </div>
 
@@ -257,15 +280,19 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900">
-                        Razorpay Payment Gateway (Test Mode)
-                      </span>
-                      <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">
-                        RECOMMENDED
-                      </span>
+                      <span className="text-xs font-bold text-slate-900">Razorpay Test Mode</span>
+                      {paymentConfigStatus === 'configured' && (
+                        <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">
+                          TEST MODE
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5">
-                      Supports Test Cards, UPI, NetBanking with HMAC-SHA256 signature verification.
+                      {paymentConfigStatus === 'configured'
+                        ? 'Test credentials are configured. Payment is verified by the store server.'
+                        : paymentConfigStatus === 'checking'
+                          ? 'Checking payment availability…'
+                          : 'Online payment setup is required before checkout can be completed.'}
                     </p>
                   </div>
                   <CreditCard className="w-5 h-5 text-slate-500 shrink-0" />
@@ -275,14 +302,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || paymentConfigStatus !== 'configured'}
               className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
             >
               <Lock className="w-4 h-4" />
               <span>
-                {isSubmitting
-                  ? 'Verifying Cart & Creating Razorpay Order...'
-                  : `Pay ₹${totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with Razorpay`}
+                {paymentConfigStatus === 'checking'
+                  ? 'Checking payment availability…'
+                  : paymentConfigStatus === 'unavailable'
+                    ? 'Online payment setup required'
+                    : isSubmitting
+                      ? 'Verifying cart & creating payment order…'
+                      : `Pay ₹${totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })} with Razorpay`}
               </span>
             </button>
           </form>
@@ -291,7 +322,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
         {/* Right Column: Order Items & Pricing Breakdown */}
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/80 p-6 space-y-6 sticky top-24 shadow-xs">
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-3">
-            Purchased Item Snapshots ({cart.length})
+            Your items ({cart.length})
           </h2>
 
           <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto pr-1">
@@ -346,16 +377,16 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           <div className="p-3 bg-slate-50 rounded-xl text-[11px] text-slate-500 space-y-1">
             <div className="flex items-center gap-1.5 font-semibold text-slate-700">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Razorpay Test Security Guarantee</span>
+              <span>Secure order review</span>
             </div>
             <p>
-              Prices are strictly validated server-side against database inventory before generating order tokens.
+              Prices and availability are checked again before payment is started.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Razorpay Interactive Test Checkout Modal */}
+      {/* Razorpay Checkout */}
       {isRazorpayModalOpen && createdOrder && razorpayOrderData && (
         <RazorpayModal
           isOpen={isRazorpayModalOpen}

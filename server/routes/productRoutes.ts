@@ -72,7 +72,7 @@ router.post('/', requireAuth, requireAdmin, (req: Request, res: Response) => {
       description: description.trim(),
       price: Number(price),
       category: category.trim(),
-      image: image || '/src/assets/images/product_headphones_matte_1792292817977.jpg',
+      image: image || '/images/product_headphones_matte_1792292817977.jpg',
       stock: Number(stock),
       sku: sku || `SKU-${Date.now().toString().slice(-6)}`,
       status: 'active',

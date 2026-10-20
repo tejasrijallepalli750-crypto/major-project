@@ -86,6 +86,7 @@ export interface Order {
   };
   orderItems: OrderItem[];
   shippingAddress: ShippingAddress;
+  razorpayOrderId?: string;
   paymentMethod: 'Razorpay' | 'Card' | 'UPI' | 'NetBanking' | 'Cash on Delivery';
   paymentResult?: PaymentResult;
   itemsPrice: number;
@@ -99,15 +100,6 @@ export interface Order {
   status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
   createdAt: string;
   updatedAt: string;
-}
-
-export interface KaggleInsight {
-  totalOrders: number;
-  totalRevenueBRL: number;
-  topCategories: { category: string; orderCount: number; avgTicket: number }[];
-  paymentDistribution: { method: string; percentage: number; count: number }[];
-  deliveryPerformance: { state: string; avgDays: number; satisfaction: number }[];
-  historicalYearDistribution: { year: number; orders: number }[];
 }
 
 export interface SecurityTestResult {

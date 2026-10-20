@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { ShoppingBag, User as UserIcon, Shield, Menu, X, CheckCircle, ExternalLink } from 'lucide-react';
+import { Menu, ShoppingBag, Shield, User as UserIcon, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
-import { ServiceStatusModal } from './ServiceStatusModal';
 
 interface NavbarProps {
   currentView: string;
@@ -14,302 +13,113 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
   const { cartCount, setIsCartDrawerOpen } = useCart();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [showAcademicBanner, setShowAcademicBanner] = useState(true);
-  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+
+  const navigate = (view: string) => {
+    setIsMobileMenuOpen(false);
+    setIsUserMenuOpen(false);
+    onNavigate(view);
+  };
+
+  const linkClass = (view: string) =>
+    `whitespace-nowrap transition-colors cursor-pointer ${
+      currentView === view ? 'text-slate-900 font-semibold' : 'text-slate-600 hover:text-slate-900'
+    }`;
 
   return (
-    <>
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200">
-        {/* Academic Project Notification Banner */}
-        {showAcademicBanner && (
-          <div className="bg-slate-900 text-slate-200 text-xs py-1.5 px-4">
-            <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 truncate">
-                <span className="font-semibold text-white">Major Academic Project:</span>
-                <span className="text-slate-300 truncate">
-                  Full-Stack E-Commerce &amp; Razorpay Payment Gateway (Test Mode) · B.Tech CSE Evaluation
-                </span>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <button
-                  onClick={() => setIsStatusModalOpen(true)}
-                  className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <Shield className="w-3 h-3" />
-                  <span>Service Readiness &amp; Setup Status</span>
-                </button>
-                <span className="text-slate-600">|</span>
-                <button
-                  onClick={() => onNavigate('docs')}
-                  className="text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1 cursor-pointer"
-                >
-                  <span>Docs &amp; Viva Guide</span>
-                  <ExternalLink className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => setShowAcademicBanner(false)}
-                  className="text-slate-400 hover:text-white p-0.5 rounded cursor-pointer"
-                  title="Dismiss banner"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      {/* Top Bar Contract: 3 zones separated by gap-8 */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
-        {/* Zone 1: Brand wordmark (single text element) */}
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-md">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
         <button
-          onClick={() => onNavigate('home')}
-          className="text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0 hover:opacity-85 transition-opacity text-left cursor-pointer flex items-center gap-2"
+          onClick={() => navigate('home')}
+          className="flex shrink-0 items-center gap-2 text-left text-xl font-bold tracking-tight text-slate-900 transition-opacity hover:opacity-85"
+          aria-label="AURA home"
         >
-          <span className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-black text-sm">
-            A
-          </span>
-          <span className="font-['Outfit'] tracking-wider">AURA</span>
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-sm font-black text-white">A</span>
+          <span className="font-['Outfit'] tracking-[0.18em]">AURA</span>
         </button>
 
-        {/* Zone 2: 4-5 clean single-line text nav links */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600">
-          <button
-            onClick={() => onNavigate('home')}
-            className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-              currentView === 'home' ? 'text-slate-900 font-semibold border-b-2 border-slate-900 py-4' : 'hover:text-slate-900'
-            }`}
-          >
-            Storefront
-          </button>
-          <button
-            onClick={() => onNavigate('catalog')}
-            className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-              currentView === 'catalog' ? 'text-slate-900 font-semibold border-b-2 border-slate-900 py-4' : 'hover:text-slate-900'
-            }`}
-          >
-            Catalog
-          </button>
-          <button
-            onClick={() => onNavigate('kaggle')}
-            className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-              currentView === 'kaggle' ? 'text-slate-900 font-semibold border-b-2 border-slate-900 py-4' : 'hover:text-slate-900'
-            }`}
-          >
-            Kaggle Dataset
-          </button>
-          <button
-            onClick={() => onNavigate('docs')}
-            className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-              currentView === 'docs' ? 'text-slate-900 font-semibold border-b-2 border-slate-900 py-4' : 'hover:text-slate-900'
-            }`}
-          >
-            Project Manual &amp; Tests
-          </button>
-          {user && (
-            <button
-              onClick={() => onNavigate('orders')}
-              className={`whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                currentView === 'orders' ? 'text-slate-900 font-semibold border-b-2 border-slate-900 py-4' : 'hover:text-slate-900'
-              }`}
-            >
-              My Orders
-            </button>
-          )}
+        <nav className="hidden items-center gap-7 text-sm md:flex">
+          <button onClick={() => navigate('home')} className={linkClass('home')}>Home</button>
+          <button onClick={() => navigate('catalog')} className={linkClass('catalog')}>Shop</button>
+          {user && <button onClick={() => navigate('orders')} className={linkClass('orders')}>My orders</button>}
         </nav>
 
-        {/* Zone 3: Actions (Cart Drawer trigger + User Authentication dropdown) */}
-        <div className="flex items-center gap-4 shrink-0">
-          {/* Cart Icon with count */}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <button
             onClick={() => setIsCartDrawerOpen(true)}
-            className="relative p-2 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-            aria-label="Shopping Cart"
+            className="relative rounded-lg p-2 text-slate-700 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            aria-label="Open shopping bag"
           >
-            <ShoppingBag className="w-5 h-5" />
+            <ShoppingBag className="h-5 w-5" />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-slate-900 text-white text-[11px] font-bold w-5 h-5 rounded-full flex items-center justify-center tabular-nums">
+              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
                 {cartCount}
               </span>
             )}
           </button>
 
-          {/* Admin Dashboard shortcut */}
           {isAdmin && (
             <button
-              onClick={() => onNavigate('admin')}
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              onClick={() => navigate('admin')}
+              className="hidden items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 transition-colors hover:bg-emerald-100 sm:inline-flex"
             >
-              <Shield className="w-3.5 h-3.5" />
-              <span>Admin Portal</span>
+              <Shield className="h-3.5 w-3.5" />
+              Admin
             </button>
           )}
 
-          {/* User Account Menu */}
-          <div className="relative">
-            {user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-2 p-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-                >
-                  <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs uppercase">
-                    {user.name.charAt(0)}
+          {user ? (
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen((open) => !open)}
+                className="flex items-center gap-2 rounded-lg p-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                aria-label="Open account menu"
+              >
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-200 text-xs font-bold uppercase text-slate-700">
+                  {user.name.charAt(0)}
+                </span>
+                <span className="hidden max-w-24 truncate text-xs font-semibold text-slate-800 lg:inline">{user.name}</span>
+              </button>
+
+              {isUserMenuOpen && (
+                <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white py-1.5 shadow-lg">
+                  <div className="border-b border-slate-100 px-4 py-2">
+                    <p className="truncate text-xs font-semibold text-slate-900">{user.name}</p>
+                    <p className="truncate text-[11px] text-slate-500">{user.email}</p>
                   </div>
-                  <span className="hidden lg:inline text-xs font-semibold text-slate-800 max-w-[100px] truncate">
-                    {user.name}
-                  </span>
-                </button>
+                  <button onClick={() => navigate('profile')} className="w-full px-4 py-2 text-left text-xs text-slate-700 hover:bg-slate-50">My profile</button>
+                  <button onClick={() => navigate('orders')} className="w-full px-4 py-2 text-left text-xs text-slate-700 hover:bg-slate-50">Orders &amp; invoices</button>
+                  {isAdmin && <button onClick={() => navigate('admin')} className="w-full px-4 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50">Store administration</button>}
+                  <div className="my-1 border-t border-slate-100" />
+                  <button onClick={() => { logout(); navigate('home'); }} className="w-full px-4 py-2 text-left text-xs font-medium text-rose-600 hover:bg-rose-50">Sign out</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button onClick={() => navigate('login')} className="hidden px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:text-slate-900 sm:inline">Sign in</button>
+              <button onClick={() => navigate('register')} className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Create account</button>
+            </div>
+          )}
 
-                {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg border border-slate-200 py-1.5 z-50">
-                    <div className="px-4 py-2 border-b border-slate-100">
-                      <p className="text-xs font-semibold text-slate-900 truncate">{user.name}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
-                      <p className="text-[10px] uppercase font-bold text-slate-400 mt-1">Role: {user.role}</p>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        onNavigate('profile');
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
-                    >
-                      My Profile
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        onNavigate('orders');
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 cursor-pointer"
-                    >
-                      Order History &amp; Invoices
-                    </button>
-                    {isAdmin && (
-                      <button
-                        onClick={() => {
-                          setIsUserMenuOpen(false);
-                          onNavigate('admin');
-                        }}
-                        className="w-full text-left px-4 py-2 text-xs text-emerald-700 hover:bg-emerald-50 font-semibold cursor-pointer"
-                      >
-                        Admin Dashboard
-                      </button>
-                    )}
-                    <div className="border-t border-slate-100 my-1" />
-                    <button
-                      onClick={() => {
-                        setIsUserMenuOpen(false);
-                        logout();
-                        onNavigate('home');
-                      }}
-                      className="w-full text-left px-4 py-2 text-xs text-rose-600 hover:bg-rose-50 font-medium cursor-pointer"
-                    >
-                      Sign Out
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => onNavigate('login')}
-                  className="px-3 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  Sign In
-                </button>
-                <button
-                  onClick={() => onNavigate('register')}
-                  className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  Register
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile hamburger menu */}
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden p-2 text-slate-600 hover:text-slate-900 rounded-lg cursor-pointer"
-            aria-label="Toggle Mobile Menu"
+            onClick={() => setIsMobileMenuOpen((open) => !open)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 md:hidden"
+            aria-label="Toggle navigation"
           >
-            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile drawer menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white px-4 pt-2 pb-4 space-y-2">
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              onNavigate('home');
-            }}
-            className="block w-full text-left py-2 text-sm text-slate-700 font-medium"
-          >
-            Storefront
-          </button>
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              onNavigate('catalog');
-            }}
-            className="block w-full text-left py-2 text-sm text-slate-700 font-medium"
-          >
-            Catalog
-          </button>
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              onNavigate('kaggle');
-            }}
-            className="block w-full text-left py-2 text-sm text-slate-700 font-medium"
-          >
-            Kaggle Dataset
-          </button>
-          <button
-            onClick={() => {
-              setIsMobileMenuOpen(false);
-              onNavigate('docs');
-            }}
-            className="block w-full text-left py-2 text-sm text-slate-700 font-medium"
-          >
-            Project Manual &amp; Tests
-          </button>
-          {user && (
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                onNavigate('orders');
-              }}
-              className="block w-full text-left py-2 text-sm text-slate-700 font-medium"
-            >
-              My Orders
-            </button>
-          )}
-          {isAdmin && (
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                onNavigate('admin');
-              }}
-              className="block w-full text-left py-2 text-sm font-semibold text-emerald-700"
-            >
-              Admin Dashboard
-            </button>
-          )}
-        </div>
+        <nav className="space-y-1 border-t border-slate-200 bg-white px-4 py-3 text-sm md:hidden">
+          <button onClick={() => navigate('home')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Home</button>
+          <button onClick={() => navigate('catalog')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Shop</button>
+          {user && <button onClick={() => navigate('orders')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">My orders</button>}
+          {isAdmin && <button onClick={() => navigate('admin')} className="block w-full rounded-lg px-3 py-2 text-left font-semibold text-emerald-700 hover:bg-emerald-50">Store administration</button>}
+          {!user && <button onClick={() => navigate('login')} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50"><UserIcon className="h-4 w-4" />Sign in</button>}
+        </nav>
       )}
     </header>
-
-    {/* Service Connection Status Modal */}
-    <ServiceStatusModal
-      isOpen={isStatusModalOpen}
-      onClose={() => setIsStatusModalOpen(false)}
-    />
-  </>
   );
 };

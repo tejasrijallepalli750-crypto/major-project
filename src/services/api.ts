@@ -1,4 +1,4 @@
-import { Product, User, Order, CartItem, KaggleInsight, SecurityTestResult } from '../types';
+import { Product, User, Order, CartItem, SecurityTestResult } from '../types';
 
 const BASE_URL = '/api';
 
@@ -190,9 +190,11 @@ export const api = {
   },
 
   // --- Payment Endpoints ---
-  async getPaymentConfig(): Promise<{ success: boolean; keyId: string; currency: string; mode: string }> {
+  async getPaymentConfig(): Promise<{ success: boolean; isConfigured: boolean; keyId?: string; currency: string; mode: string; message?: string }> {
     const res = await fetch(`${BASE_URL}/payment/config`);
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to check payment availability');
+    return data;
   },
 
   async createPaymentOrder(orderId: string): Promise<{
@@ -221,8 +223,7 @@ export const api = {
     orderId: string;
     razorpay_order_id: string;
     razorpay_payment_id: string;
-    razorpay_signature?: string;
-    simulateTestMode?: boolean;
+    razorpay_signature: string;
   }): Promise<{ success: boolean; order: Order; message: string }> {
     const res = await fetch(`${BASE_URL}/payment/verify`, {
       method: 'POST',
@@ -234,7 +235,7 @@ export const api = {
     return data;
   },
 
-  // --- Admin & Kaggle Dataset Endpoints ---
+  // --- Admin Endpoints ---
   async getAdminStats(): Promise<{ success: boolean; data: any }> {
     const res = await fetch(`${BASE_URL}/admin/stats`, {
       headers: getAuthHeaders(),
@@ -242,33 +243,6 @@ export const api = {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to fetch admin stats');
     return data;
-  },
-
-  async getKaggleInsights(): Promise<{ success: boolean; dataset: any; data: KaggleInsight }> {
-    const res = await fetch(`${BASE_URL}/admin/kaggle-insights`, {
-      headers: getAuthHeaders(),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Failed to fetch Kaggle insights');
-    return data;
-  },
-
-  async importKaggleSample(): Promise<{ success: boolean; message: string; importedCount: number }> {
-    const res = await fetch(`${BASE_URL}/admin/kaggle-import-sample`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Failed to import sample');
-    return data;
-  },
-
-  async resetDemoData(): Promise<{ success: boolean; message: string }> {
-    const res = await fetch(`${BASE_URL}/admin/reset-demo`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    });
-    return res.json();
   },
 
   // --- Automated Security & Transaction Test Runner ---

@@ -11,8 +11,6 @@ interface AuthContextType {
   register: (payload: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<User> & { currentPassword?: string; newPassword?: string }) => Promise<void>;
-  loginAsDemoAdmin: () => Promise<void>;
-  loginAsDemoCustomer: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,14 +64,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.user);
   };
 
-  const loginAsDemoAdmin = async () => {
-    await login('admin@aura.store', 'Admin@123');
-  };
-
-  const loginAsDemoCustomer = async () => {
-    await login('student@college.edu', 'Customer@123');
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -85,8 +75,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         register,
         logout,
         updateProfile,
-        loginAsDemoAdmin,
-        loginAsDemoCustomer,
       }}
     >
       {children}

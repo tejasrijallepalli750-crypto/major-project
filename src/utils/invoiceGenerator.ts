@@ -68,7 +68,7 @@ export const generateInvoicePDF = (order: Order) => {
   doc.setFontSize(9);
   doc.setTextColor(51, 65, 85);
   doc.text(`Method: ${order.paymentMethod || 'Razorpay Test Gateway'}`, pageWidth - 80, y + 6);
-  doc.text(`Transaction ID: ${order.paymentResult?.razorpay_payment_id || order.paymentResult?.id || 'TEST_SIMULATED'}`, pageWidth - 80, y + 11);
+  doc.text(`Transaction ID: ${order.paymentResult?.razorpay_payment_id || order.paymentResult?.id || 'Not available'}`, pageWidth - 80, y + 11);
   doc.text(`Verification: HMAC-SHA256 Verified`, pageWidth - 80, y + 16);
 
   // Payment Badge
@@ -164,8 +164,8 @@ export const generateInvoicePDF = (order: Order) => {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(148, 163, 184);
-  doc.text('This is a computer-generated tax invoice for B.Tech Major Academic Project demonstration.', 20, y + 6);
-  doc.text('Processed securely via Razorpay Payment Gateway (Test Mode). No physical signature required.', 20, y + 11);
+  doc.text('Computer-generated invoice. No physical signature required.', 20, y + 6);
+  doc.text(`Payment status: ${order.isPaid ? 'Paid via Razorpay Test Mode' : 'Pending'}.`, 20, y + 11);
   doc.text('Thank you for shopping with AURA Retail.', pageWidth - 20, y + 6, { align: 'right' });
 
   // Save the PDF
