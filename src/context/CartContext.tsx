@@ -1,6 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Product, CartItem } from '../types';
 import { api } from '../services/api';
+import { useAuth } from './AuthContext';
+import { calculateOrderTotals } from '../utils/orderPricing';
 
 interface CartContextType {
   cart: CartItem[];
@@ -20,7 +22,17 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const readCartOwner = (): string | null => {
+  try {
+    return localStorage.getItem('aura_cart_owner');
+  } catch (error) {
+    console.warn('[Cart] Failed to read the saved cart owner', error);
+    return null;
+  }
+};
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
       const saved = localStorage.getItem('aura_cart');
@@ -31,6 +43,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
+  const [savedCartUserId, setSavedCartUserId] = useState<string | null>(readCartOwner);
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
 
   useEffect(() => {
     try {
@@ -40,13 +55,91 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [cart]);
 
+  useEffect(() => {
+    if (isAuthLoading) return;
+    if (!user) {
+      if (savedCartUserId || readCartOwner()) {
+        setCart([]);
+        cartRef.current = [];
+        setSavedCartUserId(null);
+        try {
+          localStorage.removeItem('aura_cart');
+          localStorage.removeItem('aura_cart_owner');
+        } catch (error) {
+          console.warn('[Cart] Failed to clear the previous account cart cache', error);
+        }
+      }
+      return;
+    }
+    let isActive = true;
+    const loadRemoteCart = async () => {
+      const ownerId = readCartOwner() || savedCartUserId;
+      const guestCart = ownerId ? [] : cartRef.current;
+      if (ownerId && ownerId !== user.id) {
+        setCart([]);
+        cartRef.current = [];
+        try {
+          localStorage.removeItem('aura_cart');
+          localStorage.removeItem('aura_cart_owner');
+        } catch (error) {
+          console.warn('[Cart] Failed to clear a cart from another account', error);
+        }
+      }
+      try {
+        const saved = await api.getCart();
+        if (!isActive) return;
+        if (saved.data.length) {
+          setCart(saved.data);
+        } else if (guestCart.length) {
+          const migrated = await api.saveCart(guestCart.map(({ productId, quantity }) => ({ productId, quantity })));
+          if (isActive) setCart(migrated.data);
+        } else {
+          setCart([]);
+        }
+        if (isActive) {
+          setSavedCartUserId(user.id);
+          try {
+            localStorage.setItem('aura_cart_owner', user.id);
+          } catch (error) {
+            console.warn('[Cart] Failed to persist the cart owner', error);
+          }
+        }
+      } catch (error) {
+        console.error('[Cart] Could not load the signed-in customer cart from the server:', error);
+      }
+    };
+    void loadRemoteCart();
+    return () => { isActive = false; };
+  }, [isAuthLoading, user?.id]);
+
+  useEffect(() => {
+    if (isAuthLoading || !user || savedCartUserId !== user.id) return;
+    const timer = window.setTimeout(() => {
+      void api.saveCart(cart.map(({ productId, quantity }) => ({ productId, quantity }))).catch((error: unknown) => {
+        console.error('[Cart] Failed to save the signed-in customer cart:', error);
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [cart, isAuthLoading, savedCartUserId, user]);
+
   const addToCart = (product: Product, quantity: number = 1) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.productId === product.id);
       if (existing) {
         const newQty = Math.min(product.stock, existing.quantity + quantity);
         return prev.map((item) =>
-          item.productId === product.id ? { ...item, quantity: newQty, stock: product.stock } : item
+          item.productId === product.id
+            ? {
+                ...item,
+                name: product.name,
+                price: product.price,
+                image: product.image,
+                category: product.category,
+                quantity: newQty,
+                stock: product.stock,
+                sku: product.sku,
+              }
+            : item
         );
       } else {
         return [
@@ -56,6 +149,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: product.name,
             price: product.price,
             image: product.image,
+            category: product.category,
             quantity: Math.min(product.stock, quantity),
             stock: product.stock,
             sku: product.sku,
@@ -92,9 +186,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Synchronized cart totals
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const itemsPrice = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shippingPrice = itemsPrice >= 2000 || itemsPrice === 0 ? 0 : 150;
-  const taxPrice = Number((itemsPrice * 0.18).toFixed(2));
-  const totalPrice = Number((itemsPrice + shippingPrice + taxPrice).toFixed(2));
+  const { shippingPrice, taxPrice, totalPrice } = calculateOrderTotals(itemsPrice);
 
   // Server-side validation against authoritative database
   const validateCartWithServer = async (): Promise<{ success: boolean; errors?: string[] }> => {

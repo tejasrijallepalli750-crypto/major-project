@@ -40,6 +40,7 @@ export interface CartItem {
   name: string;
   price: number;
   image: string;
+  category?: string;
   quantity: number;
   stock: number;
   sku: string;
@@ -63,6 +64,7 @@ export interface OrderItem {
   quantity: number;
   image: string;
   sku: string;
+  category?: string;
 }
 
 export interface PaymentResult {
@@ -77,6 +79,15 @@ export interface PaymentResult {
   currency: string;
 }
 
+export interface DemoPaymentAttempt {
+  attemptId: string;
+  outcome: 'success' | 'failure' | 'cancelled';
+  mode: 'LOCAL_DEMO';
+  amount: number;
+  currency: 'INR';
+  recordedAt: string;
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
@@ -89,8 +100,9 @@ export interface Order {
   orderItems: OrderItem[];
   shippingAddress: ShippingAddress;
   razorpayOrderId?: string;
-  paymentMethod: 'Razorpay' | 'Card' | 'UPI' | 'NetBanking' | 'Cash on Delivery';
+  paymentMethod: 'Razorpay' | 'Local Demo' | 'Card' | 'UPI' | 'NetBanking' | 'Cash on Delivery';
   paymentResult?: PaymentResult;
+  demoPaymentAttempts?: DemoPaymentAttempt[];
   itemsPrice: number;
   shippingPrice: number;
   taxPrice: number;

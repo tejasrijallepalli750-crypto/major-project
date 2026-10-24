@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Star, ShoppingBag, ShieldCheck, Truck, RefreshCw, Check, AlertCircle } from 'lucide-react';
+import { Heart, Star, ShoppingBag, ShieldCheck, Truck, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
 import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
+import { formatCategoryLabel } from '../utils/productPresentation';
+import { ProductImage } from '../components/ProductImage';
+import { BackButton } from '../components/BackButton';
 
 interface ProductDetailPageProps {
   productId: string;
@@ -18,12 +22,12 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onSelectProduct,
 }) => {
   const { addToCart } = useCart();
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const [product, setProduct] = useState<Product | null>(null);
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [justAdded, setJustAdded] = useState(false);
-  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -88,36 +92,26 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     }
   };
 
+  const visibleFeatures = (product.features || []).filter((feature) => feature !== 'Imported from /dataset folder');
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Back button */}
-      <button
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer transition-colors"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Back to Catalog</span>
-      </button>
+      <BackButton onClick={onBack} label="Back to Catalog" />
 
       {/* Main PDP Grid: Left Gallery + Right Contiguous Purchase Module */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
         {/* Left Column: Product Gallery */}
         <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/80 p-6 overflow-hidden">
           <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
-            {!imageError ? (
-              <img
-                src={product.image}
-                alt={product.name}
-                referrerPolicy="no-referrer"
-                onError={() => setImageError(true)}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center text-slate-400">
-                <ShoppingBag className="w-12 h-12 mb-2" />
-                <span className="text-xs font-semibold">{product.name}</span>
-              </div>
-            )}
+            <ProductImage
+              src={product.image}
+              name={product.name}
+              category={product.category}
+              sku={product.sku}
+              className="h-full w-full"
+              imageClassName="h-full w-full object-cover"
+              showIllustrationLabel
+            />
           </div>
 
           {/* Technical Specifications Callouts */}
@@ -127,17 +121,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
               <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
-                <span className="text-slate-500">Product code:</span>
-                <span className="font-mono font-semibold text-slate-800">{product.sku}</span>
-              </div>
-              <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
                 <span className="text-slate-500">Category:</span>
-                <span className="font-semibold text-slate-800">{product.category}</span>
+                <span className="font-semibold text-slate-800">{formatCategoryLabel(product.category)}</span>
               </div>
-              <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
+              {product.brand && <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
                 <span className="text-slate-500">Brand / Manufacturer:</span>
                 <span className="font-semibold text-slate-800">{product.brand}</span>
-              </div>
+              </div>}
               <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
                 <span className="text-slate-500">Inventory Status:</span>
                 <span className={`font-semibold ${product.stock > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
@@ -146,11 +136,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </div>
             </div>
 
-            {product.features && product.features.length > 0 && (
+            {visibleFeatures.length > 0 && (
               <div className="mt-4">
                 <span className="text-xs text-slate-500 font-medium block mb-2">Key Highlights:</span>
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs text-slate-700">
-                  {product.features.map((feat, idx) => (
+                  {visibleFeatures.map((feat, idx) => (
                     <li key={idx} className="flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-slate-900 shrink-0" />
                       <span>{feat}</span>
@@ -167,9 +157,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div>
             {/* Unboxed Metadata */}
             <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider font-medium mb-2">
-              <span>{product.brand}</span>
-              <span aria-hidden="true">·</span>
-              <span>{product.category}</span>
+              {product.brand && <span>{product.brand}</span>}
+              {product.brand && <span aria-hidden="true">·</span>}
+              <span>{formatCategoryLabel(product.category)}</span>
             </div>
 
             {/* Product Title */}
@@ -178,13 +168,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </h1>
 
             {/* Rating */}
-            <div className="flex items-center gap-2 mt-2">
+            {product.numReviews > 0 ? <div className="flex items-center gap-2 mt-2">
               <div className="flex items-center gap-1 text-xs text-slate-700">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 <span className="font-bold">{product.rating.toFixed(1)}</span>
                 <span className="text-slate-400 font-normal">({product.numReviews} customer reviews)</span>
               </div>
-            </div>
+            </div> : <p className="mt-2 text-xs text-slate-500">No customer reviews yet</p>}
           </div>
 
           {/* Pricing in INR */}
@@ -192,9 +182,6 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 font-mono tabular-nums">
                 ₹{product.price.toLocaleString('en-IN')}
-              </span>
-              <span className="text-xs text-slate-500 font-normal">
-                (Inclusive of all statutory taxes / 18% GST)
               </span>
             </div>
           </div>
@@ -240,6 +227,15 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           {/* Action CTAs */}
           <div className="space-y-2.5 pt-2">
             <button
+              type="button"
+              onClick={() => toggleWishlist(product.id)}
+              aria-pressed={isWishlisted(product.id)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <Heart className={`h-4 w-4 ${isWishlisted(product.id) ? 'fill-rose-500 text-rose-500' : ''}`} />
+              {isWishlisted(product.id) ? 'Saved to wishlist' : 'Add to wishlist'}
+            </button>
+            <button
               onClick={handleAddToCart}
               disabled={product.stock === 0}
               className={`w-full py-3 px-4 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer ${
@@ -276,11 +272,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-500">
             <div className="flex items-center gap-2">
               <Truck className="w-4 h-4 text-slate-700" />
-              <span>Complimentary insured shipping on orders above ₹2,000</span>
+              <span>Complimentary shipping on orders above ₹2,000</span>
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-slate-700" />
-              <span>Secure payment confirmation and server-side verification</span>
+              <span>Secure payment confirmation</span>
             </div>
           </div>
         </div>
@@ -298,7 +294,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               onClick={onBack}
               className="text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer"
             >
-              Explore all in {product.category}
+              Explore all in {formatCategoryLabel(product.category)}
             </button>
           </div>
 
@@ -311,25 +307,28 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               >
                 <div>
                   <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-3">
-                    <img
+                    <ProductImage
                       src={rec.image}
-                      alt={rec.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      name={rec.name}
+                      category={rec.category}
+                      sku={rec.sku}
+                      className="h-full w-full"
+                      imageClassName="h-full w-full object-cover group-hover:scale-105 transition-transform"
+                      showIllustrationLabel
                     />
                     <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900 text-white text-[10px] font-bold">
                       Recommended
                     </div>
                   </div>
-                  <p className="text-[11px] font-medium text-slate-500 uppercase">{rec.category}</p>
+                  <p className="text-[11px] font-medium text-slate-500 uppercase">{formatCategoryLabel(rec.category)}</p>
                   <h4 className="text-xs font-bold text-slate-900 line-clamp-1 group-hover:text-amber-600 transition-colors mt-0.5">
                     {rec.name}
                   </h4>
-                  <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                  {rec.numReviews > 0 && <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                     <span>{rec.rating.toFixed(1)}</span>
                     <span>({rec.numReviews})</span>
-                  </div>
+                  </div>}
                 </div>
 
                 <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between">
@@ -355,4 +354,3 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     </div>
   );
 };
-

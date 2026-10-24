@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 360" role="img" aria-label="Illustrative Beauty &amp; Fragrance category artwork">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="hsl(309 58% 95%)"/><stop offset="1" stop-color="hsl(21 65% 89%)"/></linearGradient><linearGradient id="item" x2="1" y2="1"><stop stop-color="hsl(309 54% 54%)"/><stop offset="1" stop-color="hsl(21 56% 38%)"/></linearGradient><filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#27364b" flood-opacity=".15"/></filter></defs>
+<rect width="480" height="360" rx="28" fill="url(#bg)"/><circle cx="405" cy="62" r="54" fill="#fff" opacity=".34"/><circle cx="72" cy="300" r="78" fill="#fff" opacity=".28"/>
+<path d="M58 274c92-28 241-28 365 0" fill="none" stroke="#fff" stroke-width="2" opacity=".65"/>
+<circle cx="62" cy="50" r="37" transform="translate(178 57)" fill="#fff" opacity=".55" filter="url(#shadow)"/>
+<g transform="translate(178 57)" fill="none" stroke="url(#item)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M50 20h24l4 18v42H46V38z M47 38h34 M57 12h10v8H57z M53 50h18v15H53z"/></g>
+<path d="M32 316h416" stroke="#fff" stroke-width="2" opacity=".7"/><text x="34" y="341" font-family="Arial,sans-serif" font-size="15" font-weight="600" fill="#344054">Beauty &amp; Fragrance</text>
+<circle cx="279" cy="89" r="8" fill="hsl(21 58% 50%)" opacity=".55"/><circle cx="241" cy="119" r="4" fill="#fff" opacity=".8"/>
+</svg>

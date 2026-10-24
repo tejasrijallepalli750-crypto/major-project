@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
+import { WishlistProvider } from './context/WishlistContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
@@ -15,11 +16,12 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
+import { WishlistPage } from './pages/WishlistPage';
 import { Order } from './types';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<string>('home');
-  const [selectedProductId, setSelectedProductId] = useState<string>('prod-001');
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [catalogCategory, setCatalogCategory] = useState('All');
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
@@ -43,7 +45,8 @@ export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
-        <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
+        <WishlistProvider>
+          <div className="min-h-screen flex flex-col bg-[#fffdf8] text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
           {/* Universal Top Bar */}
           <Navbar currentView={currentView} onNavigate={handleNavigate} />
 
@@ -60,6 +63,7 @@ export default function App() {
             {currentView === 'catalog' && (
               <CatalogPage
                 initialCategory={catalogCategory}
+                onNavigate={handleNavigate}
                 onSelectProduct={(id) => handleNavigate('product-detail', id)}
               />
             )}
@@ -74,6 +78,8 @@ export default function App() {
             )}
 
             {currentView === 'cart' && <CartPage onNavigate={handleNavigate} />}
+
+            {currentView === 'wishlist' && <WishlistPage onNavigate={handleNavigate} />}
 
             {currentView === 'checkout' && (
               <CheckoutPage
@@ -92,15 +98,16 @@ export default function App() {
 
             {currentView === 'register' && <RegisterPage onNavigate={handleNavigate} />}
 
-            {currentView === 'profile' && <ProfilePage />}
+            {currentView === 'profile' && <ProfilePage onNavigate={handleNavigate} />}
 
-            {currentView === 'admin' && <AdminDashboard />}
+            {currentView === 'admin' && <AdminDashboard onNavigate={handleNavigate} />}
 
           </main>
 
           {/* Quiet Universal Footer */}
           <Footer onNavigate={handleNavigate} />
-        </div>
+          </div>
+        </WishlistProvider>
       </CartProvider>
     </AuthProvider>
   );

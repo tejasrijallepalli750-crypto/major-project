@@ -1,12 +1,16 @@
 import { Router, Request, Response } from 'express';
+import { db } from '../db/database';
 
 const router = Router();
 
-router.get('/services-status', (_req: Request, res: Response) => {
+router.get('/services-status', async (_req: Request, res: Response) => {
   const mongoUri = (process.env.MONGODB_URI || '').trim();
   const razorpayKey = (process.env.RAZORPAY_KEY_ID || '').trim();
   const razorpaySecret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
-  const isMongoConfigured = /^mongodb(\+srv)?:\/\//.test(mongoUri) && !mongoUri.includes('<username>');
+  const isMongoConfigured = /^mongodb(\+srv)?:\/\//.test(mongoUri)
+    && !mongoUri.includes('<username>')
+    && !mongoUri.includes('<password>');
+  const isMongoConnected = await db.ping();
   const isRazorpayConfigured = razorpayKey.startsWith('rzp_test_')
     && !razorpayKey.includes('YourTestKeyIdHere')
     && razorpaySecret.length >= 12
@@ -17,13 +21,15 @@ router.get('/services-status', (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     services: {
       database: {
-        mode: 'Local persistent document store',
-        status: 'working_persistent',
-        isExternalConnected: false,
+        mode: 'MongoDB Atlas',
+        status: isMongoConnected ? 'connected' : 'disconnected',
+        isExternalConnected: isMongoConnected,
         mongoConfigured: isMongoConfigured,
-        details: isMongoConfigured
-          ? 'A MongoDB URI is present, but MongoDB integration is not implemented; this build uses its local persistent store.'
-          : 'Using persistent JSON storage in ./data/aura_database.json.',
+        details: isMongoConnected
+          ? 'MongoDB ping succeeded.'
+          : isMongoConfigured
+            ? 'MongoDB is configured but the server cannot complete a database ping.'
+            : 'Set a private MONGODB_URI in the local .env file.',
       },
       paymentGateway: {
         provider: 'Razorpay',

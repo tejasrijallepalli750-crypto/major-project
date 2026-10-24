@@ -1,16 +1,7 @@
 import React from 'react';
-import {
-  Sparkles,
-  Shirt,
-  Smartphone,
-  Laptop,
-  Headphones,
-  Lamp,
-  Tv,
-  Briefcase,
-  BookOpen,
-  Flame,
-} from 'lucide-react';
+import { ShoppingBag, Sparkles } from 'lucide-react';
+import { Product } from '../types';
+import { formatCategoryLabel } from '../utils/productPresentation';
 
 export interface CategoryItem {
   id: string;
@@ -22,99 +13,39 @@ export interface CategoryItem {
   catalogCategory?: string;
 }
 
-export const CATEGORIES: CategoryItem[] = [
-  {
-    id: 'for-you',
-    name: 'For You',
-    icon: Sparkles,
-    color: 'bg-amber-100 text-amber-700 border-amber-200',
-    badge: 'Popular',
-    catalogCategory: 'All',
-  },
-  {
-    id: 'mobiles',
-    name: 'Mobiles & Tech',
-    icon: Smartphone,
-    color: 'bg-blue-100 text-blue-700 border-blue-200',
-    badge: '5G Deals',
-    catalogCategory: 'Electronics',
-  },
-  {
-    id: 'fashion',
-    name: 'Fashion',
-    icon: Shirt,
-    color: 'bg-rose-100 text-rose-700 border-rose-200',
-    badge: 'Min 70% Off',
-    catalogCategory: 'Apparel',
-  },
-  {
-    id: 'electronics',
-    name: 'Electronics',
-    icon: Laptop,
-    color: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-    catalogCategory: 'Electronics',
-  },
-  {
-    id: 'audio',
-    name: 'Audio & Sound',
-    icon: Headphones,
-    color: 'bg-purple-100 text-purple-700 border-purple-200',
-    badge: 'Top Rated',
-    catalogCategory: 'Audio & Wearables',
-  },
-  {
-    id: 'home',
-    name: 'Home & Living',
-    icon: Lamp,
-    color: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    catalogCategory: 'Home & Living',
-  },
-  {
-    id: 'appliances',
-    name: 'Appliances',
-    icon: Tv,
-    color: 'bg-cyan-100 text-cyan-700 border-cyan-200',
-    badge: '4K AI',
-    catalogCategory: 'Electronics',
-  },
-  {
-    id: 'bags',
-    name: 'Bags & Travel',
-    icon: Briefcase,
-    color: 'bg-amber-100 text-amber-800 border-amber-300',
-    catalogCategory: 'Bags & Accessories',
-  },
-  {
-    id: 'books',
-    name: 'Books & Station',
-    icon: BookOpen,
-    color: 'bg-orange-100 text-orange-700 border-orange-200',
-    catalogCategory: 'Stationery & Books',
-  },
-  {
-    id: 'festive-deals',
-    name: 'Festive Utsav',
-    icon: Flame,
-    color: 'bg-red-100 text-red-600 border-red-200',
-    badge: 'Live',
-    catalogCategory: 'All',
-  },
-];
-
 interface FlipkartCategoryNavProps {
+  products: Product[];
   selectedCategoryId: string;
   onSelectCategory: (category: CategoryItem) => void;
 }
 
 export const FlipkartCategoryNav: React.FC<FlipkartCategoryNavProps> = ({
+  products,
   selectedCategoryId,
   onSelectCategory,
 }) => {
+  const categories: CategoryItem[] = [
+    {
+      id: 'all',
+      name: 'All Products',
+      icon: Sparkles,
+      color: 'bg-amber-100 text-amber-700 border-amber-200',
+      catalogCategory: 'All',
+    },
+    ...Array.from(new Set(products.map((product) => product.category))).map((category) => ({
+      id: category,
+      name: formatCategoryLabel(category),
+      icon: ShoppingBag,
+      color: 'bg-amber-100 text-amber-700 border-amber-200',
+      catalogCategory: category,
+    })),
+  ];
+
   return (
     <div className="bg-white border-b border-slate-200/90 shadow-xs">
       <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between overflow-x-auto py-3 gap-2 sm:gap-4 no-scrollbar">
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const isSelected = selectedCategoryId === cat.id;
             const Icon = cat.icon;
 

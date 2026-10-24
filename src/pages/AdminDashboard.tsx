@@ -24,8 +24,13 @@ import { api } from '../services/api';
 import { Product, Order } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
+import { BackButton } from '../components/BackButton';
 
-export const AdminDashboard: React.FC = () => {
+interface AdminDashboardProps {
+  onNavigate: (view: string) => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'dataset'>('overview');
   const [stats, setStats] = useState<any | null>(null);
@@ -52,21 +57,22 @@ export const AdminDashboard: React.FC = () => {
     name: '',
     description: '',
     price: 0,
-    category: 'Electronics',
+    category: 'Computers & Accessories',
     stock: 20,
     sku: '',
     image: '',
     brand: 'AURA Custom',
+    status: 'active' as Product['status'],
   });
 
-  const fetchData = async () => {
+  const fetchData = async (): Promise<string | null> => {
     setIsLoading(true);
     try {
       const [statsRes, prodRes, ordersRes, datasetRes] = await Promise.all([
         api.getAdminStats(),
-        api.getProducts({ limit: 100 }),
+        api.getProducts({ limit: 1000, includeInactive: true }),
         api.getAllOrders(),
-        api.getDatasetStatus().catch(() => ({ success: true, folderPath: '/dataset', filesCount: 0, files: [] })),
+        api.getDatasetStatus(),
       ]);
       setStats(statsRes.data);
       setProducts(prodRes.data);
@@ -74,9 +80,12 @@ export const AdminDashboard: React.FC = () => {
       if (datasetRes && datasetRes.success) {
         setDatasetInfo(datasetRes);
       }
-    } catch (err: any) {
+      return null;
+    } catch (err: unknown) {
       console.error('Failed to load admin stats', err);
-      setMessage({ text: err.message || 'Failed to load administration data', type: 'error' });
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load administration data';
+      setMessage({ text: errorMessage, type: 'error' });
+      return errorMessage;
     } finally {
       setIsLoading(false);
     }
@@ -86,13 +95,22 @@ export const AdminDashboard: React.FC = () => {
     setIsSyncingDataset(true);
     try {
       const res = await api.syncDataset();
+      const refreshError = await fetchData();
+      const resultDetails = [
+        `${res.importedCount} product(s) added`,
+        `${res.updatedCount} existing product(s) refreshed`,
+        `${res.duplicateCount} already present`,
+        `${res.invalidCount} invalid row(s) skipped`,
+        `processed: ${res.processedFiles.join(', ') || 'no files'}`,
+        ...res.errors,
+      ];
+      if (refreshError) resultDetails.push(`Dashboard refresh failed: ${refreshError}`);
       setMessage({
-        text: res.message || `Successfully synced ${res.importedCount} product(s) from /dataset folder to storefront!`,
-        type: 'success',
+        text: resultDetails.join('. '),
+        type: res.errors.length > 0 || refreshError ? 'error' : 'success',
       });
-      fetchData();
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Failed to sync dataset', type: 'error' });
+    } catch (err: unknown) {
+      setMessage({ text: err instanceof Error ? err.message : 'Failed to sync dataset', type: 'error' });
     } finally {
       setIsSyncingDataset(false);
     }
@@ -172,11 +190,12 @@ export const AdminDashboard: React.FC = () => {
       name: '',
       description: '',
       price: 1999,
-      category: 'Electronics',
+      category: 'Computers & Accessories',
       stock: 25,
       sku: `SKU-${Date.now().toString().slice(-6)}`,
-      image: '/images/product_headphones_matte_1792292817977.jpg',
+      image: '',
       brand: 'AURA Signature',
+      status: 'active',
     });
     setIsProductModalOpen(true);
   };
@@ -192,6 +211,7 @@ export const AdminDashboard: React.FC = () => {
       sku: prod.sku,
       image: prod.image,
       brand: prod.brand,
+      status: prod.status,
     });
     setIsProductModalOpen(true);
   };
@@ -213,11 +233,14 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const handleDeleteProduct = async (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete product "${name}"?`)) return;
+  const handleToggleProductStatus = async (product: Product) => {
+    const nextStatus = product.status === 'active' ? 'inactive' : 'active';
+    const action = nextStatus === 'inactive' ? 'deactivate' : 'reactivate';
+    if (!window.confirm(`Are you sure you want to ${action} "${product.name}"?`)) return;
     try {
-      await api.deleteProduct(id);
-      setMessage({ text: `Product "${name}" deleted.`, type: 'success' });
+      if (nextStatus === 'inactive') await api.deleteProduct(product.id);
+      else await api.updateProduct(product.id, { status: nextStatus });
+      setMessage({ text: `Product "${product.name}" ${nextStatus === 'active' ? 'reactivated' : 'deactivated'}.`, type: 'success' });
       fetchData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Failed to delete product', type: 'error' });
@@ -237,6 +260,7 @@ export const AdminDashboard: React.FC = () => {
   if (!user || user.role !== 'admin') {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
         <AlertTriangle className="w-12 h-12 text-rose-500 mx-auto" />
         <h2 className="text-xl font-bold text-slate-900">Administrator Access Required</h2>
         <p className="text-xs text-slate-500">
@@ -248,6 +272,7 @@ export const AdminDashboard: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       {/* Dashboard Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
@@ -269,6 +294,14 @@ export const AdminDashboard: React.FC = () => {
             title="Refresh database records"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenAddProduct}
+            className="ml-3 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-slate-900 hover:bg-amber-400"
+          >
+            <Plus className="h-4 w-4" />
+            Add product
           </button>
         </div>
       </div>
@@ -309,7 +342,7 @@ export const AdminDashboard: React.FC = () => {
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          Product Catalog ({products.length})
+          Product Catalog ({stats?.totalProducts ?? products.length})
         </button>
         <button
           onClick={() => setActiveTab('orders')}
@@ -478,14 +511,14 @@ export const AdminDashboard: React.FC = () => {
             <div className="space-y-6">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-slate-500">
-                  Manage product listings, inventory levels, SKUs, and INR prices.
+                  Manage active and inactive product listings stored in the catalog database.
                 </p>
                 <button
-                  onClick={handleOpenAddProduct}
+                  onClick={() => setActiveTab('dataset')}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span>Add New Product</span>
+                  <FolderOpen className="w-4 h-4" />
+                  <span>Import catalog file</span>
                 </button>
               </div>
 
@@ -500,7 +533,8 @@ export const AdminDashboard: React.FC = () => {
                         <th className="p-4">Price (INR)</th>
                         <th className="p-4">Inventory</th>
                         <th className="p-4">SKU</th>
-                        <th className="p-4 text-right">Actions</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -536,21 +570,18 @@ export const AdminDashboard: React.FC = () => {
                             </span>
                           </td>
                           <td className="p-4 font-mono text-[11px] text-slate-500">{p.sku}</td>
-                          <td className="p-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                onClick={() => handleOpenEditProduct(p)}
-                                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg cursor-pointer"
-                                title="Edit product"
-                              >
-                                <Edit2 className="w-3.5 h-3.5" />
+                          <td className="p-4">
+                            <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${p.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center gap-2">
+                              <button type="button" onClick={() => handleOpenEditProduct(p)} aria-label={`Edit ${p.name}`} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100">
+                                <Edit2 className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={() => handleDeleteProduct(p.id, p.name)}
-                                className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
-                                title="Delete product"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
+                              <button type="button" onClick={() => handleToggleProductStatus(p)} aria-label={`${p.status === 'active' ? 'Deactivate' : 'Reactivate'} ${p.name}`} className="rounded-md p-1.5 text-rose-600 hover:bg-rose-50">
+                                {p.status === 'active' ? <Trash2 className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                               </button>
                             </div>
                           </td>
@@ -920,7 +951,7 @@ export const AdminDashboard: React.FC = () => {
                   <input
                     type="number"
                     required
-                    min={0}
+                    min={1}
                     value={productForm.price}
                     onChange={(e) => setProductForm({ ...productForm, price: Number(e.target.value) })}
                     className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
@@ -947,12 +978,12 @@ export const AdminDashboard: React.FC = () => {
                     onChange={(e) => setProductForm({ ...productForm, category: e.target.value })}
                     className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
                   >
-                    <option value="Electronics">Electronics</option>
-                    <option value="Audio & Wearables">Audio &amp; Wearables</option>
+                    <option value="Computers & Accessories">Computers &amp; Accessories</option>
+                    <option value="Health & Beauty">Health &amp; Beauty</option>
+                    <option value="Sports & Outdoors">Sports &amp; Outdoors</option>
+                    <option value="Garden & Tools">Garden &amp; Tools</option>
                     <option value="Bags & Accessories">Bags &amp; Accessories</option>
-                    <option value="Home & Living">Home &amp; Living</option>
-                    <option value="Apparel">Apparel</option>
-                    <option value="Stationery & Books">Stationery &amp; Books</option>
+                    <option value="Home Essentials">Home Essentials</option>
                   </select>
                 </div>
                 <div>
@@ -968,14 +999,28 @@ export const AdminDashboard: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Image URL / Local Asset Path</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Local image path</label>
                 <input
                   type="text"
                   required
                   value={productForm.image}
                   onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+                  placeholder="/images/products/product-name.jpg"
                   className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
                 />
+                <p className="mt-1 text-[10px] text-slate-500">Use a unique image already stored under public/images/.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Listing status</label>
+                <select
+                  value={productForm.status}
+                  onChange={(e) => setProductForm({ ...productForm, status: e.target.value as Product['status'] })}
+                  className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
+                >
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </div>
 
               <div className="pt-3 flex justify-end gap-2">

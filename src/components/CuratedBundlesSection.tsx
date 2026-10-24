@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { PackagePlus, Plus, Equal, Check, Sparkles, ShoppingBag } from 'lucide-react';
+import { PackagePlus, Plus, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
+import { ProductImage } from './ProductImage';
 
 interface CuratedBundlesSectionProps {
   products: Product[];
@@ -15,15 +16,12 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
   const { addToCart } = useCart();
   const [bundleAdded, setBundleAdded] = useState(false);
 
-  // Find products for the flagship audiophile bundle
-  const item1 = products.find((p) => p.id === 'prod-001') || products[0];
-  const item2 = products.find((p) => p.id === 'prod-015') || products[1];
+  const item1 = products[0];
+  const item2 = products[1];
 
   if (!item1 || !item2) return null;
 
   const combinedPrice = item1.price + item2.price;
-  const bundleDiscount = 2000;
-  const bundleFinalPrice = combinedPrice - bundleDiscount;
 
   const handleAddBundle = () => {
     addToCart(item1, 1);
@@ -37,15 +35,11 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
       <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-100 text-purple-800 text-xs font-bold uppercase tracking-wider mb-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-              <span>Smart Recommendation Bundle</span>
-            </div>
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-              Frequently Bought Together
+              Pair these products
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Customers frequently combine these complementary studio essentials. Buy both together and instantly save ₹{bundleDiscount.toLocaleString('en-IN')}.
+              Pick any two products from our current collection and add them to your bag together.
             </p>
           </div>
         </div>
@@ -58,15 +52,17 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
               onClick={() => onSelectProduct(item1.id)}
               className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200/80 hover:border-slate-400 transition-all cursor-pointer w-full sm:w-72"
             >
-              <img
+              <ProductImage
                 src={item1.image}
-                alt={item1.name}
-                referrerPolicy="no-referrer"
-                className="w-16 h-16 object-cover rounded-lg shrink-0"
+                name={item1.name}
+                category={item1.category}
+                sku={item1.sku}
+                className="h-16 w-16 shrink-0 rounded-lg"
+                imageClassName="h-full w-full object-cover"
               />
               <div className="min-w-0">
                 <p className="text-xs font-bold text-slate-900 truncate">{item1.name}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{item1.brand}</p>
+                {item1.brand && <p className="text-xs text-slate-500 mt-0.5">{item1.brand}</p>}
                 <p className="text-xs font-black text-slate-900 font-mono mt-1">
                   ₹{item1.price.toLocaleString('en-IN')}
                 </p>
@@ -83,15 +79,17 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
               onClick={() => onSelectProduct(item2.id)}
               className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200/80 hover:border-slate-400 transition-all cursor-pointer w-full sm:w-72"
             >
-              <img
+              <ProductImage
                 src={item2.image}
-                alt={item2.name}
-                referrerPolicy="no-referrer"
-                className="w-16 h-16 object-cover rounded-lg shrink-0"
+                name={item2.name}
+                category={item2.category}
+                sku={item2.sku}
+                className="h-16 w-16 shrink-0 rounded-lg"
+                imageClassName="h-full w-full object-cover"
               />
               <div className="min-w-0">
                 <p className="text-xs font-bold text-slate-900 truncate">{item2.name}</p>
-                <p className="text-xs text-slate-500 mt-0.5">{item2.brand}</p>
+                {item2.brand && <p className="text-xs text-slate-500 mt-0.5">{item2.brand}</p>}
                 <p className="text-xs font-black text-slate-900 font-mono mt-1">
                   ₹{item2.price.toLocaleString('en-IN')}
                 </p>
@@ -103,19 +101,13 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
           <div className="flex flex-col sm:flex-row items-center gap-4 w-full lg:w-auto shrink-0 justify-end">
             <div className="text-center sm:text-right">
               <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                Bundle Price for Both
+                Combined price
               </span>
               <div className="flex items-baseline justify-center sm:justify-end gap-2 mt-0.5">
                 <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
-                  ₹{bundleFinalPrice.toLocaleString('en-IN')}
-                </span>
-                <span className="text-xs line-through text-slate-400 font-mono">
                   ₹{combinedPrice.toLocaleString('en-IN')}
                 </span>
               </div>
-              <span className="text-[11px] font-bold text-emerald-600 block mt-0.5">
-                You save ₹{bundleDiscount.toLocaleString('en-IN')} instantly!
-              </span>
             </div>
 
             <button

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Menu, ShoppingBag, Shield, User as UserIcon, X } from 'lucide-react';
+import { Heart, Menu, ShoppingBag, Shield, User as UserIcon, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
 
 interface NavbarProps {
   currentView: string;
@@ -11,6 +12,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
   const { user, isAdmin, logout } = useAuth();
   const { cartCount, setIsCartDrawerOpen } = useCart();
+  const { productIds } = useWishlist();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -27,7 +29,19 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:gap-2 sm:px-6 md:gap-6 lg:px-8">
+        <button
+          onClick={() => navigate('wishlist')}
+          className={`relative rounded-lg p-2 transition-colors hover:bg-slate-100 hover:text-rose-600 ${currentView === 'wishlist' ? 'text-rose-600' : 'text-slate-700'}`}
+          aria-label={`Open wishlist with ${productIds.length} saved items`}
+        >
+          <Heart className="h-5 w-5" />
+          {productIds.length > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+              {productIds.length}
+            </span>
+          )}
+        </button>
         <button
           onClick={() => navigate('home')}
           className="flex shrink-0 items-center gap-2 text-left text-xl font-bold tracking-tight text-slate-900 transition-opacity hover:opacity-85"
@@ -97,7 +111,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
           ) : (
             <div className="flex items-center gap-1 sm:gap-2">
               <button onClick={() => navigate('login')} className="hidden px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:text-slate-900 sm:inline">Sign in</button>
-              <button onClick={() => navigate('register')} className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800">Create account</button>
+              <button onClick={() => navigate('register')} className="hidden rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-slate-800 sm:inline-flex">Create account</button>
             </div>
           )}
 
@@ -115,9 +129,11 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
         <nav className="space-y-1 border-t border-slate-200 bg-white px-4 py-3 text-sm md:hidden">
           <button onClick={() => navigate('home')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Home</button>
           <button onClick={() => navigate('catalog')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Shop</button>
+          <button onClick={() => navigate('wishlist')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Wishlist ({productIds.length})</button>
           {user && <button onClick={() => navigate('orders')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">My orders</button>}
           {isAdmin && <button onClick={() => navigate('admin')} className="block w-full rounded-lg px-3 py-2 text-left font-semibold text-emerald-700 hover:bg-emerald-50">Store administration</button>}
           {!user && <button onClick={() => navigate('login')} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50"><UserIcon className="h-4 w-4" />Sign in</button>}
+          {!user && <button onClick={() => navigate('register')} className="block w-full rounded-lg px-3 py-2 text-left font-semibold text-slate-900 hover:bg-slate-50">Create account</button>}
         </nav>
       )}
     </header>

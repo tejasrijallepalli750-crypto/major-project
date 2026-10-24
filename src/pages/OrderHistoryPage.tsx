@@ -4,6 +4,8 @@ import { Order } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
+import { ProductImage } from '../components/ProductImage';
+import { BackButton } from '../components/BackButton';
 
 interface OrderHistoryPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -36,9 +38,10 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
   if (!user) {
     return (
       <div className="max-w-md mx-auto px-4 py-20 text-center space-y-4">
+        <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
         <AlertCircle className="w-12 h-12 text-slate-400 mx-auto" />
         <h2 className="text-lg font-bold text-slate-900">Sign In to View Orders</h2>
-        <p className="text-xs text-slate-500">Please sign in to access your order history and downloadable tax invoices.</p>
+        <p className="text-xs text-slate-500">Please sign in to access your order history and downloadable invoices.</p>
         <button
           onClick={() => onNavigate('login')}
           className="px-5 py-2.5 bg-slate-900 text-white font-semibold text-xs rounded-xl cursor-pointer"
@@ -51,6 +54,7 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
 
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       <div className="border-b border-slate-200 pb-4">
         <div className="text-xs uppercase font-semibold tracking-wider text-slate-500 mb-1">
           Customer Portal
@@ -59,14 +63,14 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
           My Order History &amp; Invoices
         </h1>
         <p className="text-xs text-slate-500 mt-1">
-          Showing orders placed under account {user.email}
+        Showing orders placed under {user.email}
         </p>
       </div>
 
       {isLoading ? (
         <div className="py-20 flex flex-col items-center justify-center text-slate-400">
           <RefreshCw className="w-8 h-8 animate-spin mb-3 text-slate-600" />
-          <p className="text-xs">Fetching customer order history...</p>
+          <p className="text-xs">Loading your order history...</p>
         </div>
       ) : orders.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto space-y-4">
@@ -84,7 +88,8 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => (
+          {orders.map((order) => {
+            return (
             <div
               key={order.id}
               className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4 shadow-xs"
@@ -107,7 +112,7 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                     </span>
                     {order.isPaid && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                        PAID (Razorpay)
+                        PAID · RAZORPAY VERIFIED
                       </span>
                     )}
                   </div>
@@ -122,7 +127,7 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                     className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download PDF Invoice</span>
+                    <span>Download order invoice</span>
                   </button>
                 </div>
               </div>
@@ -131,11 +136,13 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {order.orderItems.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl">
-                    <img
+                    <ProductImage
                       src={item.image}
-                      alt={item.name}
-                      className="w-12 h-12 object-cover rounded-lg bg-white border border-slate-200 shrink-0"
-                      referrerPolicy="no-referrer"
+                      name={item.name}
+                      category={item.category}
+                      sku={item.sku}
+                      className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-white"
+                      imageClassName="h-full w-full object-cover"
                     />
                     <div className="truncate">
                       <p className="text-xs font-semibold text-slate-900 truncate">{item.name}</p>
@@ -156,14 +163,15 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                   </span>
                 </div>
                 <div className="text-right">
-                  <span>Total Paid: </span>
+                  <span>Order total: </span>
                   <span className="font-bold font-mono text-sm text-slate-900">
                     ₹{order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

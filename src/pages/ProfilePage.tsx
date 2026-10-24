@@ -2,8 +2,13 @@ import React, { useState } from 'react';
 import { User as UserIcon, Phone, MapPin, Lock, Check, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { StateSelectModal } from '../components/StateSelectModal';
+import { BackButton } from '../components/BackButton';
 
-export const ProfilePage: React.FC = () => {
+interface ProfilePageProps {
+  onNavigate: (view: string) => void;
+}
+
+export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
   const { user, updateProfile } = useAuth();
 
   const [name, setName] = useState(user?.name || '');
@@ -84,6 +89,7 @@ export const ProfilePage: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       <div className="border-b border-slate-200 pb-4">
         <div className="text-xs uppercase font-semibold tracking-wider text-slate-500 mb-1">
           Account Settings

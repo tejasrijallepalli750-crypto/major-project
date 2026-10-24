@@ -38,7 +38,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => (
 
       <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-slate-800 pt-6 sm:flex-row">
         <p>© {new Date().getFullYear()} AURA. All rights reserved.</p>
-        <p>Prices shown in INR, inclusive of applicable taxes.</p>
+        <p>All prices are shown in INR. Applicable taxes are calculated at checkout.</p>
       </div>
     </div>
   </footer>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, CreditCard, LoaderCircle, X } from 'lucide-react';
+import { AlertCircle, LoaderCircle, X } from 'lucide-react';
 import { api } from '../services/api';
 import { Order } from '../types';
 
@@ -31,6 +31,34 @@ interface RazorpayCheckout {
   on: (event: string, handler: (response: { error?: { description?: string } }) => void) => void;
 }
 
+let razorpayCheckoutScript: Promise<void> | undefined;
+
+const loadRazorpayCheckout = (): Promise<void> => {
+  if (window.Razorpay) return Promise.resolve();
+  if (razorpayCheckoutScript) return razorpayCheckoutScript;
+
+  razorpayCheckoutScript = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => {
+      if (window.Razorpay) resolve();
+      else {
+        script.remove();
+        razorpayCheckoutScript = undefined;
+        reject(new Error('Razorpay Checkout loaded without its payment handler.'));
+      }
+    };
+    script.onerror = () => {
+      script.remove();
+      razorpayCheckoutScript = undefined;
+      reject(new Error('Razorpay Checkout could not be loaded.'));
+    };
+    document.head.appendChild(script);
+  });
+  return razorpayCheckoutScript;
+};
+
 declare global {
   interface Window {
     Razorpay?: new (options: Record<string, unknown>) => RazorpayCheckout;
@@ -39,7 +67,7 @@ declare global {
 
 export const RazorpayModal: React.FC<RazorpayModalProps> = ({ isOpen, onClose, order, razorpayData, onSuccess, onFailure }) => {
   const openedRef = useRef(false);
-  const [message, setMessage] = useState('Opening secure Razorpay Test Mode checkout…');
+  const [message, setMessage] = useState('Opening secure Razorpay checkout…');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -47,14 +75,24 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ isOpen, onClose, o
     openedRef.current = true;
 
     const openCheckout = async () => {
-      if (!window.Razorpay) {
+      try {
+        await loadRazorpayCheckout();
+      } catch {
         const detail = 'Razorpay Checkout could not be loaded. Check your internet connection and try again.';
         setError(detail);
         onFailure(detail);
         return;
       }
 
-      const checkout = new window.Razorpay({
+      const RazorpayConstructor = window.Razorpay;
+      if (!RazorpayConstructor) {
+        const detail = 'Razorpay Checkout could not be loaded. Check your internet connection and try again.';
+        setError(detail);
+        onFailure(detail);
+        return;
+      }
+
+      const checkout = new RazorpayConstructor({
         key: razorpayData.keyId,
         amount: razorpayData.amount,
         currency: razorpayData.currency,
@@ -64,7 +102,12 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ isOpen, onClose, o
         prefill: { name: razorpayData.customer.name, email: razorpayData.customer.email, contact: razorpayData.customer.phone },
         notes: { orderNumber: razorpayData.orderNumber },
         theme: { color: '#0f172a' },
-        modal: { ondismiss: onClose },
+        modal: {
+          ondismiss: () => {
+            onClose();
+            onFailure('Checkout was closed before payment completed. Your order remains unpaid.');
+          },
+        },
         handler: async (response: RazorpayResponse) => {
           setMessage('Verifying payment with our server…');
           try {
@@ -76,8 +119,10 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ isOpen, onClose, o
             });
             if (!verified.success || !verified.order) throw new Error(verified.message || 'Payment verification failed.');
             onSuccess(verified.order);
-          } catch (verificationError: any) {
-            const detail = verificationError.message || 'Payment could not be verified.';
+          } catch (verificationError: unknown) {
+            const detail = verificationError instanceof Error
+              ? verificationError.message
+              : 'Payment could not be verified.';
             setError(detail);
             onFailure(detail);
           }
@@ -109,7 +154,6 @@ export const RazorpayModal: React.FC<RazorpayModalProps> = ({ isOpen, onClose, o
         {error ? <AlertCircle className="mx-auto h-8 w-8 text-rose-600" /> : <LoaderCircle className="mx-auto h-8 w-8 animate-spin text-slate-900" />}
         <h2 className="mt-4 text-base font-bold text-slate-900">{error ? 'Payment needs attention' : 'Secure checkout'}</h2>
         <p className="mt-2 text-xs leading-relaxed text-slate-500">{error || message}</p>
-        {!error && <div className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-[11px] font-medium text-slate-600"><CreditCard className="h-3.5 w-3.5" />Razorpay Test Mode</div>}
         {error && <button onClick={onClose} className="mt-5 rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800">Return to checkout</button>}
       </div>
     </div>

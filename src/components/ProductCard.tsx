@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { ShoppingBag, Star, Check } from 'lucide-react';
+import { Heart, ShoppingBag, Star, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
+import { useWishlist } from '../context/WishlistContext';
+import { formatCategoryLabel } from '../utils/productPresentation';
+import { ProductImage } from './ProductImage';
 
 interface ProductCardProps {
   product: Product;
@@ -10,7 +13,7 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) => {
   const { addToCart } = useCart();
-  const [imageLoaded, setImageLoaded] = useState(true);
+  const { isWishlisted, toggleWishlist } = useWishlist();
   const [justAdded, setJustAdded] = useState(false);
 
   const handleAddToCart = (e: React.MouseEvent) => {
@@ -29,21 +32,27 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
     >
       {/* Product Image Slot (65-70% height) with Fallback Container */}
       <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden flex items-center justify-center">
-        {imageLoaded ? (
-          <img
-            src={product.image}
-            alt={product.name}
-            referrerPolicy="no-referrer"
-            onError={() => setImageLoaded(false)}
-            className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-300"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 flex flex-col items-center justify-center p-4 text-center">
-            <ShoppingBag className="w-8 h-8 text-slate-400 mb-2" />
-            <span className="text-xs font-semibold text-slate-600 truncate max-w-[160px]">{product.name}</span>
-          </div>
-        )}
+        <ProductImage
+          src={product.image}
+          name={product.name}
+          category={product.category}
+          sku={product.sku}
+          className="h-full w-full"
+          imageClassName="h-full w-full object-cover group-hover:scale-103 transition-transform duration-300"
+          showIllustrationLabel
+        />
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            toggleWishlist(product.id);
+          }}
+          aria-label={isWishlisted(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+          aria-pressed={isWishlisted(product.id)}
+          className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-slate-600 shadow-sm transition-colors hover:text-rose-600"
+        >
+          <Heart className={`h-4 w-4 ${isWishlisted(product.id) ? 'fill-rose-500 text-rose-500' : ''}`} />
+        </button>
 
         {/* Stock status indicator (unboxed subtle text) */}
         {product.stock <= 5 && product.stock > 0 && (
@@ -63,9 +72,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
         <div>
           {/* Unboxed Metadata with Typographic Separator */}
           <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5 uppercase tracking-wider font-medium">
-            <span>{product.category}</span>
-            <span aria-hidden="true">·</span>
-            <span>{product.brand}</span>
+            <span>{formatCategoryLabel(product.category)}</span>
+            {product.brand && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{product.brand}</span>
+              </>
+            )}
           </div>
 
           {/* Product Title */}
@@ -86,9 +99,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
               ₹{product.price.toLocaleString('en-IN')}
             </span>
             <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
-              <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-              <span>{product.rating.toFixed(1)}</span>
-              <span>({product.numReviews})</span>
+              {product.numReviews > 0 ? (
+                <>
+                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                  <span>{product.rating.toFixed(1)}</span>
+                  <span>({product.numReviews})</span>
+                </>
+              ) : <span>No reviews yet</span>}
             </div>
           </div>
 

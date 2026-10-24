@@ -3,7 +3,13 @@ build/
 dist/
 coverage/
 /data/
+/dataset/olist_raw/
+/dataset/dataset/
+/dataset/prepared/
+/dataset/olist_catalog.csv
 .DS_Store
 *.log
 .env*
 !.env.example
+.env.local
+.env

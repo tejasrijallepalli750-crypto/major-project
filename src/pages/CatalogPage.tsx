@@ -1,50 +1,64 @@
 import React, { useState, useEffect } from 'react';
-import { Search, SlidersHorizontal, RefreshCw, X, Database, CheckCircle } from 'lucide-react';
+import { AlertCircle, Search, SlidersHorizontal, RefreshCw, X } from 'lucide-react';
 import { Product } from '../types';
 import { api } from '../services/api';
-import { useAuth } from '../context/AuthContext';
 import { ProductCard } from '../components/ProductCard';
+import { BackButton } from '../components/BackButton';
 
 interface CatalogPageProps {
   initialCategory: string;
+  onNavigate: (view: string) => void;
   onSelectProduct: (productId: string) => void;
 }
 
-export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSelectProduct }) => {
-  const { user } = useAuth();
+export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onNavigate, onSelectProduct }) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<{ name: string; count: number }[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortBy, setSortBy] = useState<string>('newest');
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (
+    search = searchTerm,
+    page = currentPage,
+    category = selectedCategory,
+    sort = sortBy,
+  ) => {
     setIsLoading(true);
+    setErrorMessage(null);
     try {
       const [prodRes, catRes] = await Promise.all([
         api.getProducts({
-          search: searchTerm || undefined,
-          category: selectedCategory === 'All' ? undefined : selectedCategory,
-          sort: sortBy,
+          search: search || undefined,
+          category: category === 'All' ? undefined : category,
+          sort,
+          page,
+          limit: 24,
         }),
         api.getCategories(),
       ]);
 
       setProducts(prodRes.data);
+      setTotalProducts(prodRes.total);
+      setTotalPages(prodRes.totalPages);
       setCategories(catRes.data);
     } catch (err) {
       console.error('Failed to fetch catalog', err);
+      setErrorMessage(err instanceof Error ? err.message : 'Unable to load products right now.');
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchProducts();
-  }, [selectedCategory, sortBy]);
+    setCurrentPage(1);
+    fetchProducts(searchTerm, 1);
+  }, [selectedCategory, sortBy, currentPage]);
 
   useEffect(() => {
     setSelectedCategory(initialCategory);
@@ -59,71 +73,60 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSel
     setSelectedCategory('All');
     setSearchTerm('');
     setSortBy('newest');
-  };
-
-  const handleDatasetSync = async () => {
-    setIsSyncing(true);
-    setSyncToast(null);
-    try {
-      const res = await api.syncDataset();
-      setSyncToast(res.message || `Synced ${res.importedCount} products from /dataset`);
-      fetchProducts();
-      setTimeout(() => setSyncToast(null), 5000);
-    } catch (err: any) {
-      setSyncToast('Failed to sync dataset: ' + err.message);
-      setTimeout(() => setSyncToast(null), 5000);
-    } finally {
-      setIsSyncing(false);
-    }
+    setCurrentPage(1);
+    fetchProducts('', 1, 'All', 'newest');
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Toast Notification */}
-      {syncToast && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center justify-between shadow-xs">
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-            <span>{syncToast}</span>
-          </div>
-          <button onClick={() => setSyncToast(null)} className="text-slate-400 hover:text-slate-600">
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       {/* Page Title & Search Bar */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs uppercase font-semibold tracking-wider text-slate-500">
-              AURA collection
-            </span>
-            {user?.role === 'admin' && (
-              <button
-                onClick={handleDatasetSync}
-                disabled={isSyncing}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer disabled:opacity-50"
-                title="Sync products from /dataset folder into catalog"
-              >
-                <Database className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'Syncing /dataset...' : '⚡ Sync from /dataset'}</span>
-              </button>
-            )}
-          </div>
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-slate-500">AURA collection</span>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
             Explore All Products
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Shop {products.length} products across our latest collections
+            Shop {totalProducts} products across our latest collections
           </p>
         </div>
+
+        {errorMessage && (
+          <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {errorMessage}
+          </div>
+        )}
+        {!isLoading && totalPages > 1 && (
+          <nav aria-label="Product pages" className="flex items-center justify-center gap-4 pt-2">
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-slate-600" aria-live="polite">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
+          </nav>
+        )}
 
         {/* Search Form */}
         <form onSubmit={handleSearchSubmit} className="relative w-full md:w-80">
           <input
             type="text"
-            placeholder="Search headphones, watch, bag..."
+            placeholder="Search skincare, garden tools, home essentials..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full text-xs bg-white border border-slate-300 rounded-xl pl-9 pr-8 py-2.5 focus:outline-none focus:ring-1 focus:ring-slate-900"
@@ -134,7 +137,8 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSel
               type="button"
               onClick={() => {
                 setSearchTerm('');
-                fetchProducts();
+                setCurrentPage(1);
+                fetchProducts('');
               }}
               className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
             >
@@ -149,7 +153,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSel
         {/* Category Segmented Buttons */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-2 sm:pb-0 text-xs font-medium scrollbar-none">
           <button
-            onClick={() => setSelectedCategory('All')}
+            onClick={() => {
+              setSelectedCategory('All');
+              setCurrentPage(1);
+            }}
             className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer ${
               selectedCategory === 'All'
                 ? 'bg-slate-900 text-white font-semibold'
@@ -161,7 +168,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSel
           {categories.map((cat) => (
             <button
               key={cat.name}
-              onClick={() => setSelectedCategory(cat.name)}
+              onClick={() => {
+                setSelectedCategory(cat.name);
+                setCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors cursor-pointer ${
                 selectedCategory === cat.name
                   ? 'bg-slate-900 text-white font-semibold'
@@ -180,7 +190,10 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ initialCategory, onSel
           <span className="text-xs text-slate-500">Sort:</span>
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setCurrentPage(1);
+            }}
             className="text-xs font-medium bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 focus:outline-none"
           >
             <option value="newest">Newest Arrivals</option>

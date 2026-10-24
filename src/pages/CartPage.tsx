@@ -1,6 +1,8 @@
 import React from 'react';
-import { Trash2, Plus, Minus, ArrowRight, ArrowLeft, ShoppingBag, ShieldCheck } from 'lucide-react';
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, ShieldCheck } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { ProductImage } from '../components/ProductImage';
+import { BackButton } from '../components/BackButton';
 
 interface CartPageProps {
   onNavigate: (view: string) => void;
@@ -40,6 +42,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <BackButton onClick={() => onNavigate('catalog')} label="Continue Shopping" />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
@@ -64,11 +67,13 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
         <div className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-6 divide-y divide-slate-100">
           {cart.map((item) => (
             <div key={item.productId} className="py-6 first:pt-0 last:pb-0 flex flex-col sm:flex-row gap-4 sm:items-center">
-              <img
+              <ProductImage
                 src={item.image}
-                alt={item.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-xl bg-slate-100 shrink-0 border border-slate-200"
-                referrerPolicy="no-referrer"
+                name={item.name}
+                category={item.category}
+                sku={item.sku}
+                className="h-20 w-20 shrink-0 rounded-xl border border-slate-200 bg-slate-100 sm:h-24 sm:w-24"
+                imageClassName="h-full w-full object-cover"
               />
 
               <div className="flex-1 space-y-1">
@@ -84,8 +89,6 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
                 </div>
 
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span className="font-mono">SKU: {item.sku}</span>
-                  <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums">Unit: ₹{item.price.toLocaleString('en-IN')}</span>
                 </div>
 
@@ -116,13 +119,6 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
           ))}
 
           <div className="pt-6 flex items-center justify-between">
-            <button
-              onClick={() => onNavigate('catalog')}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Continue Shopping</span>
-            </button>
           </div>
         </div>
 

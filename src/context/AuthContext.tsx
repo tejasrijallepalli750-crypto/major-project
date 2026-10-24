@@ -1,13 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { api } from '../services/api';
+import { ApiError, api } from '../services/api';
 
 interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
   isAdmin: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (payload: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
   logout: () => void;
   updateProfile: (updates: Partial<User> & { currentPassword?: string; newPassword?: string }) => Promise<void>;
@@ -21,22 +21,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let active = true;
     const initAuth = async () => {
       if (token) {
         try {
           const res = await api.getProfile();
-          setUser(res.user);
+          if (active) setUser(res.user);
         } catch (err) {
-          console.warn('[AuthContext] Session invalid or expired, resetting');
-          localStorage.removeItem('aura_token');
-          setToken(null);
+          if (!active) return;
+          if (err instanceof ApiError && err.status === 401) {
+            console.warn('[AuthContext] Session invalid or expired, resetting');
+            localStorage.removeItem('aura_token');
+            setToken(null);
+          } else {
+            console.error('[AuthContext] Could not validate the saved session:', err);
+          }
           setUser(null);
         }
       }
-      setIsLoading(false);
+      if (active) setIsLoading(false);
     };
 
     initAuth();
+    return () => {
+      active = false;
+    };
   }, [token]);
 
   const login = async (email: string, password: string) => {
@@ -44,6 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('aura_token', res.token);
     setToken(res.token);
     setUser(res.user);
+    return res.user;
   };
 
   const register = async (payload: { name: string; email: string; password: string; phone?: string }) => {

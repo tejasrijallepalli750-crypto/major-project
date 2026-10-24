@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, ArrowRight, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BackButton } from '../components/BackButton';
 
 interface LoginPageProps {
   onNavigate: (view: string) => void;
@@ -18,10 +19,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
     setErrorMessage(null);
     setIsSubmitting(true);
     try {
-      await login(email, password);
-      onNavigate('home');
-    } catch (error: any) {
-      setErrorMessage(error.message || 'We could not sign you in.');
+      const authenticatedUser = await login(email, password);
+      onNavigate(authenticatedUser.role === 'admin' ? 'admin' : 'home');
+    } catch (error: unknown) {
+      setErrorMessage(error instanceof Error ? error.message : 'We could not sign you in.');
     } finally {
       setIsSubmitting(false);
     }
@@ -29,6 +30,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="mx-auto max-w-md space-y-6 px-4 py-16">
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       <div className="space-y-2 text-center">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 font-black text-white">A</div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Welcome back</h1>

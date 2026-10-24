@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Lock, ShieldCheck, AlertCircle, CreditCard, User, Phone, Check } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Lock, ShieldCheck, AlertCircle, CreditCard, User, Phone, Check } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import { ProductImage } from '../components/ProductImage';
 import { api } from '../services/api';
 import { Order } from '../types';
 import { RazorpayModal } from '../components/RazorpayModal';
 import { StateSelectModal } from '../components/StateSelectModal';
+import { BackButton } from '../components/BackButton';
+import { checkoutIdempotency, CheckoutOrderRequest } from '../utils/checkoutIdempotency';
 
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -26,7 +29,6 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   const [city, setCity] = useState(user?.address?.city || '');
   const [state, setState] = useState(user?.address?.state || 'Andhra Pradesh');
   const [isStateModalOpen, setIsStateModalOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'Razorpay' | 'Card' | 'UPI'>('Razorpay');
 
   const phoneClean = phone.replace(/\D/g, '');
   const isPhoneValid = phoneClean.length === 10;
@@ -55,6 +57,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   }, [user]);
 
   // State for order creation & Razorpay modal
+  const submissionLock = useRef(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [paymentConfigStatus, setPaymentConfigStatus] = useState<'checking' | 'configured' | 'unavailable'>('checking');
@@ -68,7 +71,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     let isCurrent = true;
     api.getPaymentConfig()
       .then((config) => {
-        if (isCurrent) setPaymentConfigStatus(config.isConfigured ? 'configured' : 'unavailable');
+        if (isCurrent) {
+          setPaymentConfigStatus(config.isConfigured ? 'configured' : 'unavailable');
+        }
       })
       .catch((error: unknown) => {
         console.error('Unable to check payment configuration', error);
@@ -96,6 +101,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
 
   const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submissionLock.current) return;
     setErrorMessage(null);
 
     // Form input validation matching video fields
@@ -132,77 +138,74 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
       return;
     }
 
+    submissionLock.current = true;
     setIsSubmitting(true);
     try {
       const paymentConfig = await api.getPaymentConfig();
       if (!paymentConfig.isConfigured) {
         throw new Error(
-          'Online payments are not available yet. The store administrator must add Razorpay Test Mode credentials before checkout can be enabled.'
+          'Razorpay payments are unavailable. Please contact the store administrator before continuing.'
         );
       }
 
-      // 1. Authoritative Backend Validation of Cart & Inventory
-      const cartValidation = await api.validateCart(
-        cart.map((item) => ({ productId: item.productId, quantity: item.quantity }))
-      );
-
-      if (!cartValidation.success) {
-        throw new Error('Some items in your cart are no longer available in the requested quantity.');
+      let order = createdOrder;
+      if (!order) {
+        const orderRequest: CheckoutOrderRequest = {
+          orderItems: cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
+          shippingAddress: {
+            fullName: recipientName.trim(),
+            phone: phone.trim(),
+            street: `${houseBuilding.trim()}, ${roadArea.trim()}`,
+            city: city.trim(),
+            district: '',
+            state: state.trim(),
+            postalCode: postalCode.trim(),
+            country: 'India',
+          },
+          paymentMethod: 'Razorpay',
+        };
+        const idempotencyKey = await checkoutIdempotency.getKey(orderRequest);
+        const orderRes = await api.createOrder(orderRequest, idempotencyKey);
+        await checkoutIdempotency.clearKey(orderRequest, idempotencyKey);
+        order = orderRes.data;
+        setCreatedOrder(order);
       }
 
-      // 2. Create Pending Order on Express Backend
-      const combinedStreet = `${houseBuilding.trim()}, ${roadArea.trim()}`;
-      const orderRes = await api.createOrder({
-        orderItems: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
-        shippingAddress: {
-          fullName: recipientName.trim(),
-          phone: phone.trim(),
-          street: combinedStreet,
-          city: city.trim(),
-          district: '',
-          state: state.trim(),
-          postalCode: postalCode.trim(),
-          country: 'India',
-        },
-        paymentMethod,
-      });
+      if (order.isPaid) {
+        handleOrderSuccess(order);
+        return;
+      }
 
-      const order = orderRes.data;
-      setCreatedOrder(order);
-
-      // 3. Initiate Razorpay Order on Backend
+      // The gateway order is created by the backend from the persisted order total.
       const rzpRes = await api.createPaymentOrder(order.id);
       setRazorpayOrderData(rzpRes.data);
 
       // 4. Open Razorpay Checkout Interface
       setIsRazorpayModalOpen(true);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to initiate checkout order.');
+    } catch (err: unknown) {
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to initiate checkout order.');
     } finally {
+      submissionLock.current = false;
       setIsSubmitting(false);
     }
   };
 
-  const handlePaymentSuccess = (verifiedOrder: Order) => {
+  const handleOrderSuccess = (order: Order) => {
     setIsRazorpayModalOpen(false);
     clearCart();
-    onOrderSuccess(verifiedOrder);
+    onOrderSuccess(order);
   };
 
+  const handlePaymentSuccess = (verifiedOrder: Order) => handleOrderSuccess(verifiedOrder);
+
   const handlePaymentFailure = (msg: string) => {
-    setErrorMessage(`Payment error: ${msg}. You can retry or choose a different payment method.`);
+    setErrorMessage(`Payment error: ${msg}. You can retry the Razorpay checkout.`);
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Top breadcrumb */}
-      <button
-        onClick={() => onNavigate('cart')}
-        className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span>Return to Shopping Cart</span>
-      </button>
+      <BackButton onClick={() => onNavigate('cart')} label="Return to Shopping Cart" />
 
       <div className="border-b border-slate-200 pb-4">
         <div className="text-xs uppercase font-semibold tracking-wider text-slate-500 mb-1">
@@ -431,33 +434,27 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                 2. Payment Method
               </h2>
               <div className="space-y-2">
-                <label className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
+                <div className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
                   <input
                     type="radio"
                     name="paymentMethod"
-                    checked={paymentMethod === 'Razorpay'}
-                    onChange={() => setPaymentMethod('Razorpay')}
+                    checked
+                    readOnly
+                    aria-label="Razorpay payment selected"
                     className="text-slate-900"
                   />
                   <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-900">Razorpay Test Mode</span>
-                      {paymentConfigStatus === 'configured' && (
-                        <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded">
-                          TEST MODE
-                        </span>
-                      )}
-                    </div>
+                    <span className="text-xs font-bold text-slate-900">Razorpay</span>
                     <p className="text-[11px] text-slate-500 mt-0.5">
                       {paymentConfigStatus === 'configured'
-                        ? 'Test credentials are configured. Payment is verified by the store server.'
+                        ? 'Payment is verified securely by the store server.'
                         : paymentConfigStatus === 'checking'
                           ? 'Checking payment availability…'
-                          : 'Online payment setup is required before checkout can be completed.'}
+                          : 'Razorpay payments are currently unavailable.'}
                     </p>
                   </div>
                   <CreditCard className="w-5 h-5 text-slate-500 shrink-0" />
-                </label>
+                </div>
               </div>
             </div>
 
@@ -473,8 +470,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                   : paymentConfigStatus === 'unavailable'
                     ? 'Online payment setup required'
                     : isSubmitting
-                      ? 'Verifying cart & creating payment order…'
-                      : `Save & Continue · Pay ₹${totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
+                      ? 'Verifying cart & creating order…'
+                      : `Continue to payment · ₹${totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`}
               </span>
             </button>
           </form>
@@ -489,11 +486,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto pr-1">
             {cart.map((item) => (
               <div key={item.productId} className="py-3 first:pt-0 last:pb-0 flex items-center gap-3">
-                <img
+                <ProductImage
                   src={item.image}
-                  alt={item.name}
-                  className="w-12 h-12 rounded-lg object-cover bg-slate-100 shrink-0 border border-slate-200"
-                  referrerPolicy="no-referrer"
+                  name={item.name}
+                  category={item.category}
+                  sku={item.sku}
+                  className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-slate-100"
+                  imageClassName="h-full w-full object-cover"
                 />
                 <div className="flex-1 truncate">
                   <h4 className="text-xs font-semibold text-slate-900 truncate">{item.name}</h4>

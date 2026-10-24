@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Sparkles, Star, ShoppingBag, Check, Flame, Award, Heart, ArrowRight } from 'lucide-react';
+import { Sparkles, Star, ShoppingBag, Check, ArrowRight } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
+import { ProductImage } from './ProductImage';
+import { formatCategoryLabel, getCategoryArtFamily } from '../utils/productPresentation';
 
 interface RecommendationsSectionProps {
   products: Product[];
@@ -10,7 +12,6 @@ interface RecommendationsSectionProps {
 }
 
 type FilterTab = 'all' | 'top-rated' | 'under-5000' | 'tech-audio' | 'apparel-decor';
-
 export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   products,
   onSelectProduct,
@@ -35,12 +36,8 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   const filteredProducts = products.filter((prod) => {
     if (activeTab === 'top-rated') return prod.rating >= 4.8;
     if (activeTab === 'under-5000') return prod.price <= 5000;
-    if (activeTab === 'tech-audio') {
-      return prod.category === 'Electronics' || prod.category === 'Audio & Wearables';
-    }
-    if (activeTab === 'apparel-decor') {
-      return prod.category === 'Apparel' || prod.category === 'Home & Living' || prod.category === 'Bags & Accessories';
-    }
+    if (activeTab === 'tech-audio') return getCategoryArtFamily(prod.category) === 'technology';
+    if (activeTab === 'apparel-decor') return ['accessories', 'home'].includes(getCategoryArtFamily(prod.category));
     return true;
   });
 
@@ -48,11 +45,9 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   const displayList = filteredProducts.slice(0, 8);
 
   const getRecommendationBadge = (prod: Product, index: number) => {
-    if (index === 0) return { text: '99% Match', bg: 'bg-emerald-600 text-white' };
-    if (prod.rating >= 4.9) return { text: 'Top Rated 4.9★', bg: 'bg-amber-500 text-white' };
-    if (prod.price <= 3500) return { text: 'Best Value', bg: 'bg-indigo-600 text-white' };
-    if (index % 3 === 0) return { text: 'Festive Pick', bg: 'bg-rose-600 text-white' };
-    return { text: 'Recommended', bg: 'bg-slate-800 text-white' };
+    if (prod.rating >= 4.9) return { text: 'Top Rated', bg: 'bg-amber-50 text-amber-800' };
+    if (index === 0) return { text: 'Featured', bg: 'bg-amber-100 text-amber-900' };
+    return { text: 'Recommended', bg: 'bg-slate-100 text-slate-700' };
   };
 
   return (
@@ -60,7 +55,7 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-bold uppercase tracking-wider mb-2">
             <Sparkles className="w-3.5 h-3.5 text-amber-600" />
             <span>Personalized For You</span>
           </div>
@@ -68,7 +63,7 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
             Recommended Products
           </h2>
           <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-xl">
-            Curated items tailored to your browsing preferences, highest ratings, and ongoing festival specials.
+            Discover products selected from our current collection.
           </p>
         </div>
 
@@ -97,12 +92,11 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
       </div>
 
       {/* Grid of Recommended Products */}
+      {displayList.length > 0 ? (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5">
         {displayList.map((product, idx) => {
           const badge = getRecommendationBadge(product, idx);
           const isAdded = addedProductIds[product.id];
-          const discountPercent = Math.min(45, Math.round(15 + ((product.price % 30))));
-          const originalPrice = Math.round(product.price * (1 + discountPercent / 100));
 
           return (
             <div
@@ -111,13 +105,16 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
               className="group bg-white rounded-2xl border border-slate-200/90 overflow-hidden hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between"
             >
               {/* Image slot */}
-              <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden flex items-center justify-center">
-                <img
+              <div className="relative aspect-[4/3] bg-stone-50 overflow-hidden flex items-center justify-center">
+                <ProductImage
                   src={product.image}
-                  alt={product.name}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  loading="lazy"
+                  name={product.name}
+                  category={product.category}
+                  sku={product.sku}
+                  className="h-full w-full"
+                  imageClassName="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  loading="eager"
+                  showIllustrationLabel
                 />
 
                 {/* Recommendation Match Badge */}
@@ -127,18 +124,14 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
                   {badge.text}
                 </div>
 
-                {/* Discount Tag */}
-                <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-xs text-rose-600 font-extrabold text-[11px] px-2 py-0.5 rounded shadow-xs">
-                  {discountPercent}% OFF
-                </div>
               </div>
 
               {/* Content */}
               <div className="p-4 flex flex-col flex-grow justify-between gap-3">
                 <div>
                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium uppercase tracking-wider mb-1">
-                    <span>{product.category}</span>
-                    <span className="text-slate-600 font-semibold">{product.brand}</span>
+                    <span>{formatCategoryLabel(product.category)}</span>
+                    {product.brand && <span className="text-slate-600 font-semibold">{product.brand}</span>}
                   </div>
 
                   <h3 className="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors line-clamp-1">
@@ -157,16 +150,15 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
                       <span className="text-base font-extrabold text-slate-900 font-mono">
                         ₹{product.price.toLocaleString('en-IN')}
                       </span>
-                      <span className="text-xs line-through text-slate-400 font-mono">
-                        ₹{originalPrice.toLocaleString('en-IN')}
-                      </span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span className="font-semibold text-slate-700">{product.rating.toFixed(1)}</span>
-                      <span>({product.numReviews})</span>
-                    </div>
+                    {product.numReviews > 0 && (
+                      <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span className="font-semibold text-slate-700">{product.rating.toFixed(1)}</span>
+                        <span>({product.numReviews})</span>
+                      </div>
+                    )}
                   </div>
 
                   <button
@@ -198,6 +190,12 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
           );
         })}
       </div>
+      ) : (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center">
+          <p className="text-sm font-semibold text-slate-800">No products match this filter.</p>
+          <p className="mt-1 text-xs text-slate-500">Choose another filter to see more products.</p>
+        </div>
+      )}
 
       {/* View All Recommendations CTA */}
       <div className="mt-8 text-center">
@@ -205,7 +203,7 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
           onClick={onExploreMore}
           className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border border-slate-300 hover:border-slate-400 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs uppercase tracking-wider transition-all shadow-xs cursor-pointer"
         >
-          <span>Explore All 24+ Recommended Items</span>
+          <span>Browse Full Catalog</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

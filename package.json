@@ -9,7 +9,11 @@
     "preview": "vite preview",
     "start": "tsx server.ts",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --import tsx --test server/payments/razorpay.test.ts server/orders/pricing.test.ts server/orders/paymentSummary.test.ts server/routes/authRoutes.test.ts server/routes/orderRoutes.test.ts server/routes/paymentRoutes.test.ts",
+    "db:migrate-json": "tsx scripts/migrate-json-to-mongodb.ts",
+    "catalog:audit-images": "tsx scripts/audit-product-images.ts",
+    "import:olist-history": "tsx scripts/import-olist-history.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -18,12 +22,15 @@
     "bcryptjs": "^3.0.3",
     "canvas-confetti": "^1.9.4",
     "cors": "^2.8.6",
+    "csv-parse": "^7.0.3",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.546.0",
+    "mongoose": "^8.19.1",
     "motion": "^12.23.24",
+    "razorpay": "^2.9.8",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^8.3.0"

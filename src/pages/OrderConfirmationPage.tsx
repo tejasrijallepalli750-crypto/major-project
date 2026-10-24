@@ -3,6 +3,9 @@ import confetti from 'canvas-confetti';
 import { CheckCircle, Download, ShieldCheck, MapPin } from 'lucide-react';
 import { Order } from '../types';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
+import { ProductImage } from '../components/ProductImage';
+import { getOrderPaymentSummary } from '../utils/orderPaymentSummary';
+import { BackButton } from '../components/BackButton';
 
 interface OrderConfirmationPageProps {
   order: Order;
@@ -10,6 +13,8 @@ interface OrderConfirmationPageProps {
 }
 
 export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ order, onNavigate }) => {
+  const paymentSummary = getOrderPaymentSummary(order);
+
   useEffect(() => {
     // Fire celebratory confetti on verified order completion
     try {
@@ -29,6 +34,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       {/* Header Banner */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-10 text-center space-y-4 shadow-xs">
         <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-xs">
@@ -43,12 +49,19 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             Thank you for your order!
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
-            Order <span className="font-mono font-bold text-slate-900">{order.orderNumber}</span> is confirmed. You can follow its status from your account.
+            Order <span className="font-mono font-bold text-slate-900">{order.orderNumber}</span>
+            {' is confirmed. You can follow its status from your account.'}
           </p>
         </div>
 
         {/* Action Buttons */}
         <div className="pt-4 flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => onNavigate('catalog')}
+            className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl transition-colors cursor-pointer"
+          >
+            Continue shopping
+          </button>
           <button
             onClick={handleDownloadInvoice}
             className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
@@ -79,18 +92,18 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             <div className="flex justify-between py-1.5">
               <span className="text-slate-500">Payment status</span>
               <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                {order.isPaid ? 'CAPTURED / PAID' : 'PENDING'}
+                {paymentSummary.statusLabel}
               </span>
             </div>
             <div className="flex justify-between py-1.5">
               <span className="text-slate-500">Payment reference</span>
               <span className="font-mono text-slate-800 text-[11px]">
-                {order.paymentResult?.razorpay_payment_id || order.paymentResult?.id || 'Pending'}
+                {paymentSummary.reference}
               </span>
             </div>
             <div className="flex justify-between py-1.5">
               <span className="text-slate-500">Payment method</span>
-              <span className="font-semibold text-slate-800">{order.paymentMethod}</span>
+              <span className="font-semibold text-slate-800">{paymentSummary.methodLabel}</span>
             </div>
           </div>
         </div>
@@ -126,16 +139,18 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
           {order.orderItems.map((item, idx) => (
             <div key={idx} className="py-3 flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <img
+                <ProductImage
                   src={item.image}
-                  alt={item.name}
-                  className="w-12 h-12 object-cover rounded-lg bg-slate-100 border border-slate-200"
-                  referrerPolicy="no-referrer"
+                  name={item.name}
+                  category={item.category}
+                  sku={item.sku}
+                  className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-slate-100"
+                  imageClassName="h-full w-full object-cover"
                 />
                 <div>
                   <h4 className="text-xs font-semibold text-slate-900">{item.name}</h4>
                   <p className="text-[11px] text-slate-400 font-mono">
-                    SKU: {item.sku} · Qty: {item.quantity} × ₹{item.price.toLocaleString('en-IN')}
+                    Qty: {item.quantity} × ₹{item.price.toLocaleString('en-IN')}
                   </p>
                 </div>
               </div>
@@ -164,7 +179,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             </span>
           </div>
           <div className="border-t border-slate-200 pt-2 flex justify-between text-base font-bold text-slate-900">
-            <span>Total Amount Paid:</span>
+            <span>{order.isPaid ? 'Total Amount Paid:' : 'Order Total:'}</span>
             <span className="font-mono">₹{order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>

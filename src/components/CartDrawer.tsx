@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { ProductImage } from './ProductImage';
 
 interface CartDrawerProps {
   onCheckout: () => void;
@@ -70,11 +71,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
               cart.map((item) => (
                 <div key={item.productId} className="py-4 first:pt-0 last:pb-0 flex gap-4">
                   {/* Thumbnail */}
-                  <img
+                  <ProductImage
                     src={item.image}
-                    alt={item.name}
-                    className="w-16 h-16 object-cover rounded-lg bg-slate-100 shrink-0 border border-slate-200"
-                    referrerPolicy="no-referrer"
+                    name={item.name}
+                    category={item.category}
+                    sku={item.sku}
+                    className="h-16 w-16 shrink-0 rounded-lg border border-slate-200 bg-slate-100"
+                    imageClassName="h-full w-full object-cover"
                   />
 
                   {/* Details */}
@@ -90,7 +93,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      <p className="text-[11px] text-slate-400 font-mono mt-0.5">SKU: {item.sku}</p>
                     </div>
 
                     <div className="flex items-center justify-between mt-2">

@@ -1,6 +1,13 @@
-import { Product, User, Order, CartItem, SecurityTestResult } from '../types';
+import { Product, User, Order, CartItem, SecurityTestResult, ShippingAddress } from '../types';
 
 const BASE_URL = '/api';
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 const getAuthHeaders = (): HeadersInit => {
   const token = localStorage.getItem('aura_token');
@@ -39,7 +46,7 @@ export const api = {
       headers: getAuthHeaders(),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Failed to load profile');
+    if (!res.ok) throw new ApiError(data.message || 'Failed to load profile', res.status);
     return data;
   },
 
@@ -54,8 +61,44 @@ export const api = {
     return data;
   },
 
+  async getCart(): Promise<{ success: boolean; data: CartItem[] }> {
+    const res = await fetch(`${BASE_URL}/auth/cart`, { headers: getAuthHeaders() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to load your saved cart');
+    return data;
+  },
+
+  async saveCart(items: Array<{ productId: string; quantity: number }>): Promise<{ success: boolean; data: CartItem[] }> {
+    const res = await fetch(`${BASE_URL}/auth/cart`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ items }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to save your cart');
+    return data;
+  },
+
+  async getWishlist(): Promise<{ success: boolean; data: string[] }> {
+    const res = await fetch(`${BASE_URL}/auth/wishlist`, { headers: getAuthHeaders() });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to load your saved items');
+    return data;
+  },
+
+  async saveWishlist(productIds: string[]): Promise<{ success: boolean; data: string[] }> {
+    const res = await fetch(`${BASE_URL}/auth/wishlist`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ productIds }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to save your items');
+    return data;
+  },
+
   // --- Products Endpoints ---
-  async getProducts(params?: { search?: string; category?: string; sort?: string; page?: number; limit?: number }): Promise<{ success: boolean; data: Product[]; total: number; totalPages: number }> {
+  async getProducts(params?: { search?: string; category?: string; sort?: string; page?: number; limit?: number; includeInactive?: boolean }): Promise<{ success: boolean; data: Product[]; total: number; totalPages: number }> {
     const query = new URLSearchParams();
     if (params?.search) query.append('search', params.search);
     if (params?.category) query.append('category', params.category);
@@ -63,7 +106,10 @@ export const api = {
     if (params?.page) query.append('page', String(params.page));
     if (params?.limit) query.append('limit', String(params.limit));
 
-    const res = await fetch(`${BASE_URL}/products?${query.toString()}`);
+    const endpoint = params?.includeInactive ? '/products/admin/all' : '/products';
+    const res = await fetch(`${BASE_URL}${endpoint}?${query.toString()}`, {
+      ...(params?.includeInactive ? { headers: getAuthHeaders() } : {}),
+    });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to fetch products');
     return data;
@@ -138,12 +184,12 @@ export const api = {
 
   async createOrder(orderData: {
     orderItems: { productId: string; quantity: number }[];
-    shippingAddress: any;
-    paymentMethod: string;
-  }): Promise<{ success: boolean; data: Order; message: string }> {
+    shippingAddress: ShippingAddress;
+    paymentMethod: Order['paymentMethod'];
+  }, idempotencyKey: string): Promise<{ success: boolean; data: Order; message: string }> {
     const res = await fetch(`${BASE_URL}/orders`, {
       method: 'POST',
-      headers: getAuthHeaders(),
+      headers: { ...getAuthHeaders(), 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(orderData),
     });
     const data = await res.json();
@@ -190,7 +236,10 @@ export const api = {
   },
 
   // --- Payment Endpoints ---
-  async getPaymentConfig(): Promise<{ success: boolean; isConfigured: boolean; keyId?: string; currency: string; mode: string; message?: string }> {
+  async getPaymentConfig(): Promise<{
+    success: boolean;
+    isConfigured: boolean;
+  }> {
     const res = await fetch(`${BASE_URL}/payment/config`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Unable to check payment availability');
@@ -279,7 +328,7 @@ export const api = {
     filesCount: number;
     files: Array<{ name: string; size: number; updatedAt: string; type: string }>;
   }> {
-    const res = await fetch(`${BASE_URL}/dataset/status`);
+    const res = await fetch(`${BASE_URL}/dataset/status`, { headers: getAuthHeaders() });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to scan dataset directory');
     return data;
@@ -289,8 +338,12 @@ export const api = {
     success: boolean;
     message: string;
     importedCount: number;
+    updatedCount: number;
+    skippedCount: number;
+    duplicateCount: number;
+    invalidCount: number;
     processedFiles: string[];
-    errors?: string[];
+    errors: string[];
   }> {
     const res = await fetch(`${BASE_URL}/dataset/sync`, {
       method: 'POST',
@@ -327,4 +380,3 @@ export const api = {
     return data;
   },
 };
-

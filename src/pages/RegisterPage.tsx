@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, User, Phone, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { BackButton } from '../components/BackButton';
 
 interface RegisterPageProps {
   onNavigate: (view: string) => void;
@@ -47,6 +48,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-md mx-auto px-4 py-16 space-y-6">
+      <BackButton onClick={() => onNavigate('home')} label="Back to Home" />
       <div className="text-center space-y-2">
         <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black mx-auto">
           A
