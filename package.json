@@ -10,10 +10,16 @@
     "start": "tsx server.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "node --import tsx --test server/payments/razorpay.test.ts server/orders/pricing.test.ts server/orders/paymentSummary.test.ts server/routes/authRoutes.test.ts server/routes/orderRoutes.test.ts server/routes/paymentRoutes.test.ts",
+    "test": "node --import tsx --test server/payments/razorpay.test.ts server/orders/pricing.test.ts server/orders/paymentSummary.test.ts server/routes/authRoutes.test.ts server/routes/orderRoutes.test.ts server/routes/paymentRoutes.test.ts scripts/olist-product-importer.test.ts scripts/olist-catalogue-reconciliation.test.ts scripts/olist-image-enrichment.test.ts scripts/prepare-computers-photo-review.test.ts scripts/prepare-olist-category-photos.test.ts scripts/report-olist-category-images.test.ts scripts/verify-local-photo-provenance.test.ts scripts/finalize-local-photo-provenance.test.ts src/data/aboSampleCatalog.test.ts src/utils/productPresentation.test.ts",
     "db:migrate-json": "tsx scripts/migrate-json-to-mongodb.ts",
     "catalog:audit-images": "tsx scripts/audit-product-images.ts",
-    "import:olist-history": "tsx scripts/import-olist-history.ts"
+    "import:olist-history": "tsx scripts/import-olist-history.ts",
+    "import:olist-products": "tsx scripts/import-olist-products.ts",
+    "reconcile:olist-catalogue": "tsx scripts/reconcile-olist-catalogue.ts",
+    "enrich:olist-images": "tsx scripts/enrich-olist-product-images.ts",
+    "pilot:olist-local-photos": "tsx scripts/create-olist-local-photo-pilot.ts",
+    "report:olist-category-images": "tsx scripts/report-olist-category-images.ts",
+    "search:olist-category-photos": "tsx scripts/prepare-olist-category-photos.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -33,6 +39,7 @@
     "razorpay": "^2.9.8",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "sharp": "^0.35.5",
     "vite": "^8.3.0"
   },
   "devDependencies": {

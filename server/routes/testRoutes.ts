@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/database';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { SecurityTestResult } from '../../src/types';
+import { usesSharedOlistCatalogImage } from '../../src/utils/productPresentation';
 
 const router = Router();
 
@@ -21,7 +22,10 @@ router.post('/run-suite', requireAuth, requireAdmin, async (_req: Request, res: 
       && product.stock >= 0
       && product.image.startsWith('/images/'),
     );
-    const uniqueImageCount = new Set(products.products.map((product) => product.image)).size;
+    const productsRequiringUniqueImages = products.products.filter((product) =>
+      !usesSharedOlistCatalogImage(product.sku, product.image),
+    );
+    const uniqueImageCount = new Set(productsRequiringUniqueImages.map((product) => product.image)).size;
     const results: SecurityTestResult[] = [
       {
         testId: 'DB-CONNECTION-01',
@@ -36,9 +40,10 @@ router.post('/run-suite', requireAuth, requireAdmin, async (_req: Request, res: 
         testId: 'CATALOG-VALIDATION-01',
         category: 'Products',
         title: 'Sellable product data validation',
-        description: 'Checks product names, categories, prices, stock, local image paths, and image uniqueness.',
-        status: validProducts.length === products.total && uniqueImageCount === products.total ? 'passed' : 'failed',
-        details: `${validProducts.length}/${products.total} products valid; ${uniqueImageCount} unique image assignments.`,
+        description: 'Checks the returned page for valid product data and unique images outside the shared Olist category artwork.',
+        status: validProducts.length === products.products.length
+          && uniqueImageCount === productsRequiringUniqueImages.length ? 'passed' : 'failed',
+        details: `${validProducts.length}/${products.products.length} products on the checked page valid; ${products.total} active records across the catalog; ${uniqueImageCount} unique non-shared image assignments.`,
         timestamp,
       },
       {

@@ -3,6 +3,7 @@ import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, ShieldCheck } from 'lucid
 import { useCart } from '../context/CartContext';
 import { ProductImage } from '../components/ProductImage';
 import { BackButton } from '../components/BackButton';
+import { hasSimulatedOlistInventory } from '../utils/productPresentation';
 
 interface CartPageProps {
   onNavigate: (view: string) => void;
@@ -91,6 +92,11 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <span className="font-mono tabular-nums">Unit: ₹{item.price.toLocaleString('en-IN')}</span>
                 </div>
+                {hasSimulatedOlistInventory(item.inventoryMode) && (
+                  <p className="text-[10px] font-medium text-amber-700">
+                    Simulated demo inventory; not sourced from Olist
+                  </p>
+                )}
 
                 <div className="flex items-center justify-between pt-3">
                   <div className="flex items-center border border-slate-300 rounded-lg bg-slate-50">

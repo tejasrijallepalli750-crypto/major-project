@@ -18,6 +18,7 @@ export interface IOrderDocument {
     image: string;
     sku: string;
     category?: string;
+    inventoryMode?: 'simulated-demo';
   }>;
   shippingAddress: {
     fullName: string;
@@ -67,6 +68,7 @@ const orderItemSchema = new Schema(
     image: { type: String, required: true },
     sku: { type: String, required: true },
     category: { type: String, default: '' },
+    inventoryMode: { type: String, enum: ['simulated-demo'] },
   },
   { _id: false },
 );

@@ -4,6 +4,7 @@ import { CheckCircle, Download, ShieldCheck, MapPin } from 'lucide-react';
 import { Order } from '../types';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
 import { ProductImage } from '../components/ProductImage';
+import { hasSimulatedOlistInventory } from '../utils/productPresentation';
 import { getOrderPaymentSummary } from '../utils/orderPaymentSummary';
 import { BackButton } from '../components/BackButton';
 
@@ -152,6 +153,9 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
                   <p className="text-[11px] text-slate-400 font-mono">
                     Qty: {item.quantity} × ₹{item.price.toLocaleString('en-IN')}
                   </p>
+                  {hasSimulatedOlistInventory(item.inventoryMode) && (
+                    <p className="text-[10px] text-amber-700">Simulated demo inventory; not sourced from Olist</p>
+                  )}
                 </div>
               </div>
 

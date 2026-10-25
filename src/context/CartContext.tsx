@@ -138,6 +138,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 quantity: newQty,
                 stock: product.stock,
                 sku: product.sku,
+                inventoryMode: product.inventoryMode,
               }
             : item
         );
@@ -153,6 +154,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             quantity: Math.min(product.stock, quantity),
             stock: product.stock,
             sku: product.sku,
+            inventoryMode: product.inventoryMode,
           },
         ];
       }

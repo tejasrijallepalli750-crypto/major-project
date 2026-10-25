@@ -4,7 +4,7 @@ import { Product } from '../types';
 import { api } from '../services/api';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
-import { formatCategoryLabel } from '../utils/productPresentation';
+import { formatCategoryLabel, hasSimulatedOlistInventory } from '../utils/productPresentation';
 import { ProductImage } from '../components/ProductImage';
 import { BackButton } from '../components/BackButton';
 
@@ -135,6 +135,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </span>
               </div>
             </div>
+            {hasSimulatedOlistInventory(product.inventoryMode) && (
+              <p className="mt-3 text-xs font-medium text-amber-700">
+                Inventory quantity is simulated for demonstration and is not supplied by Olist.
+              </p>
+            )}
 
             {visibleFeatures.length > 0 && (
               <div className="mt-4">

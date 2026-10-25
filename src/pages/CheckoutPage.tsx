@@ -9,6 +9,7 @@ import { RazorpayModal } from '../components/RazorpayModal';
 import { StateSelectModal } from '../components/StateSelectModal';
 import { BackButton } from '../components/BackButton';
 import { checkoutIdempotency, CheckoutOrderRequest } from '../utils/checkoutIdempotency';
+import { hasSimulatedOlistInventory } from '../utils/productPresentation';
 
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -220,6 +221,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
           <div className="flex-1">{errorMessage}</div>
+        </div>
+      )}
+      {cart.some((item) => hasSimulatedOlistInventory(item.inventoryMode)) && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          This cart includes simulated demo inventory. Quantities are not supplied by Olist and availability is checked again by the server before order creation.
         </div>
       )}
 

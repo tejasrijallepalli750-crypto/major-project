@@ -3,6 +3,7 @@ build/
 dist/
 coverage/
 /data/
+/public/images/olist-enriched/
 /dataset/olist_raw/
 /dataset/dataset/
 /dataset/prepared/

@@ -27,6 +27,7 @@ export interface Product {
   stock: number;
   sku: string;
   status: 'active' | 'inactive';
+  inventoryMode?: 'simulated-demo';
   rating: number;
   numReviews: number;
   brand: string;
@@ -44,6 +45,7 @@ export interface CartItem {
   quantity: number;
   stock: number;
   sku: string;
+  inventoryMode?: 'simulated-demo';
 }
 
 export interface ShippingAddress {
@@ -65,6 +67,7 @@ export interface OrderItem {
   image: string;
   sku: string;
   category?: string;
+  inventoryMode?: 'simulated-demo';
 }
 
 export interface PaymentResult {

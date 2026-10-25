@@ -115,7 +115,8 @@ export const generateInvoicePDF = (order: Order) => {
     doc.text(item.name.slice(0, 48), 24, y);
     doc.setTextColor(148, 163, 184);
     doc.setFontSize(7.5);
-    doc.text(`SKU: ${item.sku || 'N/A'}`, 24, y + 4);
+    const inventoryNote = item.inventoryMode === 'simulated-demo' ? ' | Simulated demo stock' : '';
+    doc.text(`SKU: ${item.sku || 'N/A'}${inventoryNote}`.slice(0, 58), 24, y + 4);
 
     doc.setFontSize(8.5);
     doc.setTextColor(30, 41, 59);

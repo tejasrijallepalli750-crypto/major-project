@@ -17,6 +17,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { WishlistPage } from './pages/WishlistPage';
+import { AboSampleCatalogPage } from './pages/AboSampleCatalogPage';
 import { Order } from './types';
 
 export default function App() {
@@ -67,6 +68,8 @@ export default function App() {
                 onSelectProduct={(id) => handleNavigate('product-detail', id)}
               />
             )}
+
+            {currentView === 'abo-sample' && <AboSampleCatalogPage />}
 
             {currentView === 'product-detail' && (
               <ProductDetailPage

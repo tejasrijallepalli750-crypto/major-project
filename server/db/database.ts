@@ -12,6 +12,8 @@ import { OrderModel } from '../models/Order';
 import { IOrderDocument } from '../models/Order';
 import { closeMongo, connectMongo, getMongoConnectionState, pingMongo } from './mongo';
 import { catalogSeed } from '../catalog/catalogSeed';
+import { isManagedOlistCatalogProduct } from '../../src/utils/productPresentation';
+import { makeStockAllocationOperation } from '../orders/inventory';
 
 const DATASET_DIR = path.resolve(process.cwd(), 'dataset');
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
@@ -83,6 +85,7 @@ const productFromDocument = (document: IProductDocument): Product => ({
   stock: Number(document.stock),
   sku: String(document.sku),
   status: document.status === 'inactive' ? 'inactive' : 'active',
+  inventoryMode: document.inventoryMode === 'simulated-demo' ? 'simulated-demo' : undefined,
   rating: Number(document.rating || 0),
   numReviews: Number(document.numReviews || 0),
   brand: String(document.brand || ''),
@@ -207,11 +210,18 @@ class MongoDatabase {
   private async disableGeneratedLegacyProducts(): Promise<void> {
     const legacy = await ProductModel.find({ status: 'active' }).lean().exec();
     const ids = legacy
-      .filter((document) =>
-        isGeneratedLegacyProduct({ sku: document.sku, name: document.name })
-        || document.activeImage !== document.image
-        || !isSafeLocalImage(document.image),
-      )
+      .filter((document) => {
+        const isImportedOlistCatalogue = isManagedOlistCatalogProduct(
+          document.sku,
+          document.features,
+          isSafeLocalImage(document.image),
+        );
+        return !isImportedOlistCatalogue && (
+          isGeneratedLegacyProduct({ sku: document.sku, name: document.name })
+          || document.activeImage !== document.image
+          || !isSafeLocalImage(document.image)
+        );
+      })
       .map((document) => document.id);
     if (ids.length) {
       await ProductModel.updateMany(
@@ -267,6 +277,7 @@ class MongoDatabase {
         quantity: saved.quantity,
         stock: product.stock,
         sku: product.sku,
+        inventoryMode: product.inventoryMode,
       });
     }
     return items;
@@ -429,9 +440,10 @@ class MongoDatabase {
     try {
       await session.withTransaction(async () => {
         for (const item of order.orderItems) {
+          const allocationOperation = makeStockAllocationOperation(item.product, item.quantity);
           const allocation = await ProductModel.updateOne(
-            { id: item.product, status: 'active', stock: { $gte: item.quantity } },
-            { $inc: { stock: -item.quantity } },
+            allocationOperation.filter,
+            allocationOperation.update,
             { session },
           );
           if (allocation.modifiedCount !== 1) {

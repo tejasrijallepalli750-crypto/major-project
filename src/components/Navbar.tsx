@@ -54,6 +54,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
         <nav className="hidden items-center gap-7 text-sm md:flex">
           <button onClick={() => navigate('home')} className={linkClass('home')}>Home</button>
           <button onClick={() => navigate('catalog')} className={linkClass('catalog')}>Shop</button>
+          <button onClick={() => navigate('abo-sample')} className={linkClass('abo-sample')}>ABO sample</button>
           {user && <button onClick={() => navigate('orders')} className={linkClass('orders')}>My orders</button>}
         </nav>
 
@@ -129,6 +130,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentView, onNavigate }) => {
         <nav className="space-y-1 border-t border-slate-200 bg-white px-4 py-3 text-sm md:hidden">
           <button onClick={() => navigate('home')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Home</button>
           <button onClick={() => navigate('catalog')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Shop</button>
+          <button onClick={() => navigate('abo-sample')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">ABO sample catalogue</button>
           <button onClick={() => navigate('wishlist')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">Wishlist ({productIds.length})</button>
           {user && <button onClick={() => navigate('orders')} className="block w-full rounded-lg px-3 py-2 text-left font-medium text-slate-700 hover:bg-slate-50">My orders</button>}
           {isAdmin && <button onClick={() => navigate('admin')} className="block w-full rounded-lg px-3 py-2 text-left font-semibold text-emerald-700 hover:bg-emerald-50">Store administration</button>}

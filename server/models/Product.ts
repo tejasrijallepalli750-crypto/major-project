@@ -11,6 +11,7 @@ export interface IProductDocument {
   stock: number;
   sku: string;
   status: 'active' | 'inactive';
+  inventoryMode?: 'simulated-demo';
   rating: number;
   numReviews: number;
   brand: string;
@@ -31,6 +32,7 @@ const productSchema = new Schema<IProductDocument>(
     stock: { type: Number, required: true, default: 0, min: 0, validate: Number.isInteger },
     sku: { type: String, required: true, unique: true, trim: true, uppercase: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
+    inventoryMode: { type: String, enum: ['simulated-demo'] },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     numReviews: { type: Number, default: 0, min: 0 },
     brand: { type: String, default: 'AURA', trim: true },

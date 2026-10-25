@@ -68,6 +68,7 @@ router.post('/validate-cart', async (req, res: Response) => {
         quantity: requestedQty,
         stock: product.stock,
         sku: product.sku,
+        inventoryMode: product.inventoryMode,
       });
     }
 
@@ -196,6 +197,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
         image: product.image,
         sku: product.sku,
         category: product.category,
+        inventoryMode: product.inventoryMode,
       });
     }
 

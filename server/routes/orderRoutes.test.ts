@@ -85,6 +85,7 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     stock: 10,
     sku: 'TEST-ORDER',
     status: 'active',
+    inventoryMode: 'simulated-demo',
     rating: 0,
     numReviews: 0,
     brand: 'AURA',
@@ -151,6 +152,15 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     });
 
     assert.equal((await send(payload)).status, 401);
+    const cartValidation = await fetch(`${url}/validate-cart`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ productId: product.id, quantity: 2 }] }),
+    });
+    assert.equal(cartValidation.status, 200);
+    const validatedCart = await cartValidation.json() as { data: { items: Array<{ inventoryMode?: string }> } };
+    assert.equal(validatedCart.data.items[0].inventoryMode, 'simulated-demo');
+
     const token = generateToken(user);
     const first = await send(payload, token);
     assert.equal(first.status, 201);
@@ -160,6 +170,7 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     assert.equal(firstOrder.taxPrice, 36);
     assert.equal(firstOrder.totalPrice, 386);
     assert.equal(firstOrder.orderItems[0].price, product.price);
+    assert.equal(firstOrder.orderItems[0].inventoryMode, 'simulated-demo');
 
     const replay = await send(payload, token);
     assert.equal(replay.status, 200);
@@ -187,6 +198,13 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     const repeatedChangedIntent = await send(changedPayload, token, changedKey);
     assert.equal(repeatedChangedIntent.status, 200);
     assert.equal((await repeatedChangedIntent.json() as { data: Order }).data.id, changedOrder.id);
+    assert.equal(createCalls, 2);
+
+    const overStockRequest = await send({
+      ...payload,
+      orderItems: [{ productId: product.id, quantity: product.stock + 1 }],
+    }, token, '33333333333333333333333333333333');
+    assert.equal(overStockRequest.status, 400);
     assert.equal(createCalls, 2);
 
   } finally {

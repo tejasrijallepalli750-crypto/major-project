@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { ProductImage } from './ProductImage';
+import { hasSimulatedOlistInventory } from '../utils/productPresentation';
 
 interface CartDrawerProps {
   onCheckout: () => void;
@@ -93,6 +94,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
+                      {hasSimulatedOlistInventory(item.inventoryMode) && (
+                        <p className="mt-1 text-[10px] font-medium text-amber-700">
+                          Simulated inventory; not from Olist
+                        </p>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between mt-2">

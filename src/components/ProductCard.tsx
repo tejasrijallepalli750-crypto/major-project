@@ -3,7 +3,7 @@ import { Heart, ShoppingBag, Star, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
-import { formatCategoryLabel } from '../utils/productPresentation';
+import { formatCategoryLabel, hasSimulatedOlistInventory } from '../utils/productPresentation';
 import { ProductImage } from './ProductImage';
 
 interface ProductCardProps {
@@ -90,6 +90,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
           <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
             {product.description}
           </p>
+          {hasSimulatedOlistInventory(product.inventoryMode) && (
+            <p className="mt-2 text-[10px] font-medium text-amber-700">
+              Simulated stock; not Olist inventory
+            </p>
+          )}
         </div>
 
         {/* Price & Action Row */}

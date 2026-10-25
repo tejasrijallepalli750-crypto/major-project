@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
 import { ProductImage } from '../components/ProductImage';
+import { hasSimulatedOlistInventory } from '../utils/productPresentation';
 import { BackButton } from '../components/BackButton';
 
 interface OrderHistoryPageProps {
@@ -149,6 +150,9 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                       <p className="text-[11px] text-slate-500 font-mono">
                         {item.quantity} × ₹{item.price.toLocaleString('en-IN')}
                       </p>
+                      {hasSimulatedOlistInventory(item.inventoryMode) && (
+                        <p className="text-[10px] text-amber-700">Simulated demo inventory; not from Olist</p>
+                      )}
                     </div>
                   </div>
                 ))}
