@@ -3,17 +3,19 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
-import { User, Product, Order, CartItem, DemoPaymentAttempt } from '../../src/types';
+import { User, Product, Order, CartItem, DemoPaymentAttempt, Review } from '../../src/types';
 import { UserModel } from '../models/User';
 import { IUserDocument } from '../models/User';
 import { ProductModel } from '../models/Product';
 import { IProductDocument } from '../models/Product';
+import { ReviewModel, IReviewDocument } from '../models/Review';
 import { OrderModel } from '../models/Order';
 import { IOrderDocument } from '../models/Order';
 import { closeMongo, connectMongo, getMongoConnectionState, pingMongo } from './mongo';
 import { catalogSeed } from '../catalog/catalogSeed';
 import { isManagedOlistCatalogProduct } from '../../src/utils/productPresentation';
 import { makeStockAllocationOperation } from '../orders/inventory';
+import { calculateReviewSummary } from '../reviews/reviewRules';
 
 const DATASET_DIR = path.resolve(process.cwd(), 'dataset');
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
@@ -92,6 +94,16 @@ const productFromDocument = (document: IProductDocument): Product => ({
   features: Array.isArray(document.features) ? document.features.map(String) : [],
   createdAt: normalizeDate(document.createdAt as Date | string | undefined),
   updatedAt: normalizeDate(document.updatedAt as Date | string | undefined),
+});
+
+const reviewFromDocument = (document: IReviewDocument): Review => ({
+  id: String(document.id),
+  productId: String(document.productId),
+  userId: String(document.userId),
+  userName: String(document.userName),
+  rating: Number(document.rating),
+  comment: String(document.comment),
+  createdAt: normalizeDate(document.createdAt as Date | string | undefined),
 });
 
 const orderFromDocument = (document: IOrderDocument): Order => {
@@ -360,6 +372,47 @@ class MongoDatabase {
     this.assertConnected();
     const product = await ProductModel.findOne({ id }).lean().exec();
     return product ? productFromDocument(product) : undefined;
+  }
+
+  public async findProductReviews(productId: string): Promise<Review[]> {
+    this.assertConnected();
+    const reviews = await ReviewModel.find({ productId }).sort({ createdAt: -1 }).lean().exec();
+    return reviews.map((review) => reviewFromDocument(review));
+  }
+
+  public async createProductReview(review: Omit<Review, 'id' | 'createdAt'>): Promise<{
+    review: Review;
+    rating: number;
+    numReviews: number;
+  }> {
+    this.assertConnected();
+    const session = await mongoose.startSession();
+    let result: { review: Review; rating: number; numReviews: number } | undefined;
+    try {
+      await session.withTransaction(async () => {
+        const [created] = await ReviewModel.create([{
+          ...review,
+          id: `rev-${randomUUID()}`,
+        }], { session });
+        const savedReviews = await ReviewModel.find({ productId: review.productId })
+          .select('rating')
+          .session(session)
+          .lean()
+          .exec();
+        const summary = calculateReviewSummary(savedReviews.map((savedReview) => Number(savedReview.rating)));
+        const updatedProduct = await ProductModel.findOneAndUpdate(
+          { id: review.productId },
+          { $set: summary },
+          { new: true, runValidators: true, session },
+        ).lean().exec();
+        if (!updatedProduct) throw new Error('Product disappeared while saving its review rating.');
+        result = { review: reviewFromDocument(created.toObject()), ...summary };
+      });
+    } finally {
+      await session.endSession();
+    }
+    if (!result) throw new Error('Review transaction completed without saving a review.');
+    return result;
   }
 
   public async createProduct(data: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>): Promise<Product> {

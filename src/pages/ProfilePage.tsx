@@ -48,6 +48,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
     setSuccessMessage(null);
     setErrorMessage(null);
 
+    if (newPassword && (newPassword.length < 8 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword))) {
+      setErrorMessage('New password must be at least 8 characters and include at least one letter and one number.');
+      return;
+    }
+
     if (phone.trim()) {
       const cleanDigits = phone.replace(/\D/g, '');
       if (cleanDigits.length !== 10) {
@@ -311,7 +316,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder="At least 8 characters, one letter and one number"
                 className="w-full text-xs px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
               />
             </div>

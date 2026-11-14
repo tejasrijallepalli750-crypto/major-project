@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Heart, Star, ShoppingBag, ShieldCheck, Truck, RefreshCw, Check, AlertCircle } from 'lucide-react';
 import { Product } from '../types';
 import { api } from '../services/api';
+import { Review } from '../types';
+import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { formatCategoryLabel, hasSimulatedOlistInventory } from '../utils/productPresentation';
@@ -21,10 +23,20 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   onCheckout,
   onSelectProduct,
 }) => {
+  const { user } = useAuth();
   const { addToCart } = useCart();
   const { isWishlisted, toggleWishlist } = useWishlist();
   const [product, setProduct] = useState<Product | null>(null);
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
+  const [reviewEligibilityChecked, setReviewEligibilityChecked] = useState(false);
+  const [isEligibleToReview, setIsEligibleToReview] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewSuccess, setReviewSuccess] = useState<string | null>(null);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [justAdded, setJustAdded] = useState(false);
@@ -51,6 +63,55 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     };
     fetchProduct();
   }, [productId]);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingReviews(true);
+    api.getProductReviews(productId)
+      .then((response) => {
+        if (active) setReviews(response.data);
+      })
+      .catch((error) => {
+        if (active) setReviewError(error instanceof Error ? error.message : 'Failed to load product reviews.');
+      })
+      .finally(() => {
+        if (active) setIsLoadingReviews(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [productId]);
+
+  useEffect(() => {
+    let active = true;
+    setReviewEligibilityChecked(false);
+    setIsEligibleToReview(false);
+    if (!user) {
+      setReviewEligibilityChecked(true);
+      return () => {
+        active = false;
+      };
+    }
+
+    api.getMyOrders()
+      .then((response) => {
+        if (!active) return;
+        setIsEligibleToReview(response.data.some((order) =>
+          (order.isPaid || order.isDelivered || order.status === 'Delivered')
+          && order.orderItems.some((item) => item.product === productId)));
+      })
+      .catch((error) => {
+        if (active) {
+          setReviewError(error instanceof Error ? error.message : 'Unable to verify review eligibility.');
+        }
+      })
+      .finally(() => {
+        if (active) setReviewEligibilityChecked(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, [productId, user?.id]);
 
   if (isLoading) {
     return (
@@ -91,6 +152,29 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       onCheckout();
     }
   };
+
+  const handleSubmitReview = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setReviewError(null);
+    setReviewSuccess(null);
+    setIsSubmittingReview(true);
+    try {
+      const response = await api.createProductReview(productId, {
+        rating: reviewRating,
+        comment: reviewComment,
+      });
+      setReviews((current) => [response.data, ...current]);
+      setProduct((current) => current ? { ...current, ...response.productRating } : current);
+      setReviewComment('');
+      setReviewSuccess('Your review has been submitted.');
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : 'Failed to submit your review.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const hasReviewed = Boolean(user && reviews.some((review) => review.userId === user.id));
 
   const visibleFeatures = (product.features || []).filter((feature) => feature !== 'Imported from /dataset folder');
 
@@ -286,6 +370,102 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
         </div>
       </div>
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 space-y-6" aria-labelledby="product-reviews-heading">
+        <div>
+          <h2 id="product-reviews-heading" className="text-xl font-bold text-slate-900">Customer Reviews</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            {product.numReviews > 0
+              ? `${product.rating.toFixed(1)} out of 5 · ${product.numReviews} review${product.numReviews === 1 ? '' : 's'}`
+              : 'No customer reviews yet'}
+          </p>
+        </div>
+
+        {reviewError && (
+          <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+            {reviewError}
+          </p>
+        )}
+        {reviewSuccess && (
+          <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+            {reviewSuccess}
+          </p>
+        )}
+
+        {user && reviewEligibilityChecked && isEligibleToReview && !hasReviewed && (
+          <form onSubmit={handleSubmitReview} className="space-y-4 rounded-xl bg-slate-50 p-4">
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold text-slate-700">Your rating</legend>
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((rating) => (
+                  <button
+                    key={rating}
+                    type="button"
+                    aria-label={`${rating} star${rating === 1 ? '' : 's'}`}
+                    aria-pressed={reviewRating === rating}
+                    onClick={() => setReviewRating(rating)}
+                    className="rounded p-1 text-amber-500 hover:bg-amber-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-500"
+                  >
+                    <Star className={`h-5 w-5 ${rating <= reviewRating ? 'fill-amber-400' : ''}`} />
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            <label className="block text-xs font-semibold text-slate-700">
+              Your review
+              <textarea
+                required
+                minLength={1}
+                maxLength={2000}
+                value={reviewComment}
+                onChange={(event) => setReviewComment(event.target.value)}
+                rows={4}
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-3 text-xs font-normal"
+                placeholder="Share your experience with this product"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isSubmittingReview || !reviewComment.trim()}
+              className="rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isSubmittingReview ? 'Submitting...' : 'Submit review'}
+            </button>
+          </form>
+        )}
+        {user && reviewEligibilityChecked && isEligibleToReview && hasReviewed && (
+          <p className="text-xs text-slate-600">You have already reviewed this product.</p>
+        )}
+        {user && reviewEligibilityChecked && !isEligibleToReview && (
+          <p className="text-xs text-slate-600">A paid or delivered order containing this product is required to leave a review.</p>
+        )}
+        {!user && <p className="text-xs text-slate-600">Sign in and purchase this product to leave a review.</p>}
+
+        {isLoadingReviews ? (
+          <p className="text-xs text-slate-500">Loading reviews...</p>
+        ) : reviews.length > 0 ? (
+          <ul className="divide-y divide-slate-100">
+            {reviews.map((review) => (
+              <li key={review.id} className="py-4 first:pt-0 last:pb-0">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs font-semibold text-slate-800">{review.userName}</p>
+                  <time className="text-[11px] text-slate-500" dateTime={review.createdAt}>
+                    {new Date(review.createdAt).toLocaleDateString()}
+                  </time>
+                </div>
+                <div className="mt-1 flex items-center gap-1" aria-label={`${review.rating} out of 5 stars`}>
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star key={star} className={`h-3.5 w-3.5 ${star <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                  ))}
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-slate-700">{review.comment}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs text-slate-500">Be the first to share a review.</p>
+        )}
+      </section>
 
       {/* Recommended Products & Customers Also Viewed Section */}
       {recommendedProducts.length > 0 && (

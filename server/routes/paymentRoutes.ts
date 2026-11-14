@@ -17,8 +17,16 @@ import {
   verifyWebhookSignature,
   RazorpayPayment,
 } from '../payments/razorpay';
+import { sendOrderConfirmation } from '../email/mailer';
+import { z } from 'zod';
 
 const router = Router();
+const paymentVerificationBodySchema = z.object({
+  orderId: z.string().min(1).max(256),
+  razorpay_order_id: z.string().min(1).max(256),
+  razorpay_payment_id: z.string().min(1).max(256),
+  razorpay_signature: z.string().min(1).max(256),
+});
 
 const isDemoOutcome = (value: unknown): value is DemoPaymentAttempt['outcome'] =>
   value === 'success' || value === 'failure' || value === 'cancelled';
@@ -76,6 +84,14 @@ const paymentResult = (
   amount: order.totalPrice,
   currency: 'INR',
 });
+
+const sendOrderConfirmationSafely = async (order: Order, userEmail: string): Promise<void> => {
+  try {
+    await sendOrderConfirmation(order, userEmail);
+  } catch (error) {
+    console.error('[Mailer] Order confirmation email failed:', error instanceof Error ? error.message : 'Unknown error.');
+  }
+};
 
 router.get('/config', (_req: Request, res: Response) => {
   const config = getRazorpayConfig();
@@ -145,6 +161,9 @@ router.post('/demo/complete', requireAuth, async (req: AuthenticatedRequest, res
     }
     if (recordedAttempt.outcome !== outcome) {
       return res.status(409).json({ success: false, message: 'This demo attempt was already recorded with a different outcome.' });
+    }
+    if (outcome === 'success') {
+      await sendOrderConfirmationSafely(updatedOrder, req.user!.email);
     }
 
     return res.json({
@@ -241,11 +260,11 @@ router.post('/create-order', requireAuth, async (req: AuthenticatedRequest, res:
 
 router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body ?? {};
-    if (![orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature].every((value) =>
-      typeof value === 'string' && value.length > 0 && value.length <= 256)) {
+    const bodyResult = paymentVerificationBodySchema.safeParse(req.body);
+    if (!bodyResult.success) {
       return res.status(400).json({ success: false, message: 'The payment response is incomplete or invalid.' });
     }
+    const { orderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = bodyResult.data;
 
     const access = await verifyOrderOwnership(orderId, req.user!);
     if ('error' in access) return res.status(access.status).json({ success: false, message: access.error });
@@ -319,6 +338,7 @@ router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res: Respo
     }
 
     if (updatedOrder?.isPaid) {
+      await sendOrderConfirmationSafely(updatedOrder, order.user.email);
       return res.json({ success: true, message: 'Payment verified successfully.', order: updatedOrder });
     }
     const currentOrder = await db.findOrderById(order.id);
@@ -375,7 +395,10 @@ router.post('/webhook', async (req: Request, res: Response) => {
 
     const updatedOrder = await db.updateOrderPayment(order.id, paymentResult(order, payment, eventStatus));
     if (eventStatus !== 'captured') return res.json({ status: eventStatus });
-    if (updatedOrder?.isPaid) return res.json({ status: 'ok' });
+    if (updatedOrder?.isPaid) {
+      await sendOrderConfirmationSafely(updatedOrder, order.user.email);
+      return res.json({ status: 'ok' });
+    }
     const currentOrder = await db.findOrderByRazorpayId(payment.order_id);
     if (currentOrder?.isPaid && currentOrder.paymentResult?.razorpay_payment_id === payment.id) {
       return res.json({ status: 'already_processed' });

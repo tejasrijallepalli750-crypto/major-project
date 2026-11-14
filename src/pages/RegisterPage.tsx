@@ -20,8 +20,8 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate }) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    if (password.length < 6) {
-      setErrorMessage('Password must be at least 6 characters long.');
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setErrorMessage('Password must be at least 8 characters and include at least one letter and one number.');
       return;
     }
 
@@ -135,12 +135,14 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigate }) => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
+                placeholder="At least 8 characters, one letter and one number"
                 className="w-full text-xs px-3 py-2.5 bg-slate-50 border border-slate-300 rounded-lg pl-9 focus:ring-1 focus:ring-slate-900"
               />
               <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">Passwords are salted and hashed using bcrypt on the server.</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Use at least 8 characters, including one letter and one number. Passwords are salted and hashed using bcrypt on the server.
+            </p>
           </div>
 
           <button

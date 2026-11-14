@@ -1,0 +1,9 @@
+node_modules/
+data/
+dataset/olist_raw/
+dataset/dataset/
+.env
+.env.*
+!.env.example
+.git/
+dist/

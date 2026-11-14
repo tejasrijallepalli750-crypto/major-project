@@ -238,11 +238,60 @@ Use only credentials from Razorpay Dashboard **Test Mode**. The server rejects l
 
 To configure Test Mode, enter the values privately in `.env` and restart the backend. Do not paste credentials into chat, source code, or frontend files. A configured key pair enables checkout but does not prove end-to-end connectivity; a sandbox payment still needs to be completed. A webhook also requires a reachable HTTPS endpoint registered in the Razorpay Test Mode Dashboard and its separate webhook secret.
 
+### Order confirmation email
+
+Order confirmation emails are optional. Without a complete SMTP configuration, the server logs a warning and skips email without interrupting payment or checkout. For Gmail, enable 2-Step Verification and create an App Password for the account; use that App Password instead of the account password:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_USER=your-account@gmail.com
+SMTP_PASS=your-16-character-app-password
+MAIL_FROM="AURA Store <your-account@gmail.com>"
+```
+
+Set these values privately in the server `.env` and restart the backend. Keep the App Password secret and do not commit it. An order confirmation is sent after a captured Razorpay payment (via checkout verification or webhook) and after a successful Local Demo attempt. Local Demo remains simulated and does not collect payment.
+
 ### Local Demo Payment
 
 When the server is not running with `NODE_ENV=production`, checkout offers **Local Demo Payment** independently of Razorpay credentials. It can record simulated success, failure, or cancellation for development and presentations. These outcomes are stored in `demoPaymentAttempts`, separate from Razorpay `paymentResult` records. A demo success explicitly leaves `isPaid` false and is never counted as a collected payment. A demo cancellation marks the order cancelled and restores its reserved inventory in the same MongoDB transaction. Demo payment is disabled in production.
 
 Checkout submissions use a per-user idempotency key and payload hash. Retrying the same submission returns its existing pending order; reusing the key with different order details is rejected. Cancelled checkout requests require a new key.
+
+## Deploy to Render with MongoDB Atlas
+
+1. Push the project to a Git provider supported by Render. Create a MongoDB Atlas database and a dedicated database user. In Atlas **Network Access**, allow the outbound IP ranges for the Render service; if the selected Render plan does not provide fixed outbound IPs, use an appropriately secured Atlas network policy and a strong, unique database password.
+2. In Render, choose **New + → Blueprint**, select the repository, and deploy the `render.yaml` blueprint. It creates the `aura-store` web service. The configured build command is `npm install --legacy-peer-deps && npm run build`; the start command is `npm start`; and the health check is `/api/health`.
+3. In the Render service's **Environment** settings, add the following values. Variables marked `sync: false` in `render.yaml` must be entered in Render and are intentionally not stored in the repository.
+
+   | Variable | Value |
+   | --- | --- |
+   | `NODE_ENV` | `production` |
+   | `MONGODB_URI` | Atlas connection string, including the application database name |
+   | `JWT_SECRET` | Private random value of at least 32 characters |
+   | `RAZORPAY_KEY_ID` | Razorpay **Test Mode** key ID (`rzp_test_...`) |
+   | `RAZORPAY_KEY_SECRET` | Razorpay **Test Mode** key secret |
+   | `CORS_ORIGINS` | The deployed storefront origin, e.g. `https://aura-store.onrender.com` (no path or trailing slash) |
+   | `SMTP_HOST` | `smtp.gmail.com` |
+   | `SMTP_PORT` | `465` |
+   | `SMTP_USER` | Gmail account used to send confirmations |
+   | `SMTP_PASS` | Gmail App Password (not the account password) |
+   | `MAIL_FROM` | Sender label and address, e.g. `AURA Store <store@gmail.com>` |
+
+   Generate a JWT secret locally, for example with `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`, and paste it directly into Render's private environment settings. Enable Gmail 2-Step Verification and create an App Password before setting `SMTP_PASS`. SMTP settings are optional for the application; without them, order emails are skipped with a warning.
+
+   If you configure Razorpay webhooks, also set the optional `RAZORPAY_WEBHOOK_SECRET` in Render and register the deployed URL ending in `/api/payment/webhook` in the Razorpay Test Mode Dashboard.
+4. Confirm the Atlas URI and network access settings, then trigger a deploy. Render supplies `PORT`; the server binds to that port, serves the built `dist/` storefront in production, and serves the API from the same web service. Do not set a fixed `PORT`.
+5. Open `https://<your-render-service>.onrender.com/api/health`. Confirm the response reports `database.status` as `connected`; the health check returns HTTP 503 until MongoDB is reachable. Then open the service root to verify the storefront and test its API-backed flows.
+
+The included `Dockerfile` also builds a production image in two stages. To build and run it locally with your private `.env`, use:
+
+```powershell
+docker build -t aura-store .
+docker run --rm --env-file .env -p 3000:3000 -e PORT=3000 aura-store
+```
+
+The `.dockerignore` excludes local dependencies, generated data, source datasets, Git metadata, and environment files from the build context.
 
 ## Production Deployment and Scalability
 

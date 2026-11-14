@@ -3,44 +3,84 @@ import bcrypt from 'bcryptjs';
 import { db, getDatabaseErrorStatus } from '../db/database';
 import { assertJwtConfigured, generateToken, requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { User } from '../../src/types';
+import { z } from 'zod';
 
 const router = Router();
 const addressFields = ['street', 'city', 'district', 'state', 'postalCode', 'country'] as const;
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const passwordRequirementsMessage = 'Password must be at least 8 characters and include at least one letter and one number.';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const isValidPassword = (password: string) =>
+  password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password);
+
+const registrationBodySchema = z.object({
+  name: z.string()
+    .trim()
+    .min(1, 'Please provide name, email, and password.')
+    .max(100, 'Name must be no longer than 100 characters.'),
+  email: z.string()
+    .trim()
+    .min(1, 'Please provide name, email, and password.')
+    .max(254, 'Invalid email address format.')
+    .refine((email) => emailRegex.test(email), 'Invalid email address format.'),
+  password: z.string()
+    .min(1, 'Please provide name, email, and password.')
+    .refine(isValidPassword, passwordRequirementsMessage),
+  phone: z.string().optional(),
+  address: z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    district: z.string().optional(),
+    state: z.string().optional(),
+    postalCode: z.string().optional(),
+    country: z.string().optional(),
+  }).optional(),
+});
+
+const loginBodySchema = z.object({
+  email: z.string()
+    .trim()
+    .min(1, 'Please enter both email and password.')
+    .max(254, 'Invalid email address format.')
+    .refine((email) => emailRegex.test(email), 'Invalid email address format.'),
+  password: z.string().min(1, 'Please enter both email and password.'),
+});
+
+const getRegistrationValidationMessage = (issue: z.ZodIssue | undefined): string => {
+  if (!issue) return 'Please provide valid registration details.';
+  if (issue.code !== 'invalid_type') return issue.message;
+
+  switch (issue.path[0]) {
+    case 'name':
+    case 'email':
+    case 'password':
+      return 'Please provide name, email, and password.';
+    case 'phone':
+      return 'Phone number must be a string.';
+    case 'address':
+      return issue.path.length > 1 ? 'Address fields must be strings.' : 'Address must be a valid object.';
+    default:
+      return 'Please provide valid registration details.';
+  }
+};
+
 // POST /api/auth/register
 router.post('/register', async (req, res: Response) => {
   try {
-    const body: unknown = req.body;
-    if (!isRecord(body)) {
-      return res.status(400).json({ success: false, message: 'Please provide valid registration details.' });
+    const bodyResult = registrationBodySchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: getRegistrationValidationMessage(bodyResult.error.issues[0]),
+      });
     }
-    const { name, email, password, phone, address } = body;
+    const { name, email, password, phone, address } = bodyResult.data;
+    const normalizedName = name;
+    const normalizedEmail = email.toLowerCase();
 
-    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string'
-      || !name.trim() || !email.trim() || !password) {
-      return res.status(400).json({ success: false, message: 'Please provide name, email, and password.' });
-    }
-
-    const normalizedName = name.trim();
-    const normalizedEmail = email.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (normalizedName.length > 100) {
-      return res.status(400).json({ success: false, message: 'Name must be no longer than 100 characters.' });
-    }
-    if (normalizedEmail.length > 254 || !emailRegex.test(normalizedEmail)) {
-      return res.status(400).json({ success: false, message: 'Invalid email address format.' });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long.' });
-    }
-
-    if (phone !== undefined && typeof phone !== 'string') {
-      return res.status(400).json({ success: false, message: 'Phone number must be a string.' });
-    }
     const cleanPhone = typeof phone === 'string' ? phone.replace(/\D/g, '') : '';
     if (cleanPhone && cleanPhone.length !== 10) {
       return res.status(400).json({ success: false, message: 'Phone number must be exactly 10 digits.' });
@@ -56,14 +96,8 @@ router.post('/register', async (req, res: Response) => {
     };
     let normalizedAddress = defaultAddress;
     if (address !== undefined) {
-      if (!isRecord(address)) {
-        return res.status(400).json({ success: false, message: 'Address must be a valid object.' });
-      }
       normalizedAddress = { ...defaultAddress };
       for (const field of addressFields) {
-        if (address[field] !== undefined && typeof address[field] !== 'string') {
-          return res.status(400).json({ success: false, message: 'Address fields must be strings.' });
-        }
         if (typeof address[field] === 'string') normalizedAddress[field] = address[field];
       }
     }
@@ -111,20 +145,18 @@ router.post('/register', async (req, res: Response) => {
 // POST /api/auth/login
 router.post('/login', async (req, res: Response) => {
   try {
-    const body: unknown = req.body;
-    if (!isRecord(body)) {
-      return res.status(400).json({ success: false, message: 'Please enter both email and password.' });
+    const bodyResult = loginBodySchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      const issue = bodyResult.error.issues[0];
+      return res.status(400).json({
+        success: false,
+        message: issue?.code === 'invalid_type'
+          ? 'Please enter both email and password.'
+          : issue?.message || 'Please enter both email and password.',
+      });
     }
-    const { email, password } = body;
-
-    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
-      return res.status(400).json({ success: false, message: 'Please enter both email and password.' });
-    }
-
-    const normalizedEmail = email.trim().toLowerCase();
-    if (normalizedEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      return res.status(400).json({ success: false, message: 'Invalid email address format.' });
-    }
+    const { email, password } = bodyResult.data;
+    const normalizedEmail = email.toLowerCase();
 
     assertJwtConfigured();
     const user = await db.findUserByEmail(normalizedEmail);
@@ -227,8 +259,11 @@ router.put('/profile', requireAuth, async (req: AuthenticatedRequest, res: Respo
       if (!req.user.password || !(await bcrypt.compare(currentPassword, req.user.password))) {
         return res.status(400).json({ success: false, message: 'Current password does not match.' });
       }
-      if (newPassword.length < 6) {
-        return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long.' });
+      if (!isValidPassword(newPassword)) {
+        return res.status(400).json({
+          success: false,
+          message: 'New password must be at least 8 characters and include at least one letter and one number.',
+        });
       }
       updates.password = await bcrypt.hash(newPassword, 12);
     }

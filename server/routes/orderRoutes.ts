@@ -5,8 +5,44 @@ import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/a
 import { CartItem, ShippingAddress } from '../../src/types';
 import { calculateOrderTotals } from '../../src/utils/orderPricing';
 import { getDatabaseErrorStatus, IdempotencyConflictError, InventoryError, OrderCancellationError } from '../db/database';
+import { z } from 'zod';
 
 const router = Router();
+
+const orderBodySchema = z.object({
+  orderItems: z.array(z.object({
+    productId: z.string().optional(),
+    product: z.string().optional(),
+    quantity: z.number().int().min(1).max(99),
+  }).refine((item) => (item.productId !== undefined ? item.productId : item.product || '').trim().length > 0))
+    .min(1),
+  shippingAddress: z.object({
+    fullName: z.string().trim().min(1),
+    phone: z.string(),
+    street: z.string().trim().min(1),
+    city: z.string().trim().min(1),
+    district: z.string().optional(),
+    state: z.string().trim().min(1),
+    postalCode: z.string().trim().min(1),
+    country: z.string().optional(),
+  }),
+  paymentMethod: z.enum(['Razorpay', 'Local Demo']),
+});
+
+const getOrderBodyValidationMessage = (issue: z.ZodIssue | undefined): string => {
+  if (issue?.path[0] === 'orderItems') {
+    return issue.path.length > 1
+      ? 'Each item must include a valid product and quantity.'
+      : 'Cannot create order with an empty items list.';
+  }
+  if (issue?.path[0] === 'shippingAddress') {
+    return 'Please provide complete delivery shipping address information.';
+  }
+  if (issue?.path[0] === 'paymentMethod') {
+    return 'Choose Razorpay Test Mode or Local Demo payment.';
+  }
+  return 'Please provide valid order details.';
+};
 
 interface CartValidationRequest {
   items: Array<{
@@ -101,58 +137,37 @@ router.post('/validate-cart', async (req, res: Response) => {
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = req.user!;
-    const body: unknown = req.body;
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return res.status(400).json({ success: false, message: 'Please provide valid order details.' });
+    const bodyResult = orderBodySchema.safeParse(req.body);
+    if (!bodyResult.success) {
+      return res.status(400).json({
+        success: false,
+        message: getOrderBodyValidationMessage(bodyResult.error.issues[0]),
+      });
     }
-    const { orderItems, shippingAddress, paymentMethod } = body as Record<string, unknown>;
+    const { orderItems, shippingAddress, paymentMethod } = bodyResult.data;
     const idempotencyKey = req.get('Idempotency-Key')?.trim() || '';
     if (!/^[\da-f-]{16,100}$/i.test(idempotencyKey)) {
       return res.status(400).json({ success: false, message: 'A valid checkout idempotency key is required.' });
     }
 
-    if (!orderItems || !Array.isArray(orderItems) || orderItems.length === 0) {
-      return res.status(400).json({ success: false, message: 'Cannot create order with an empty items list.' });
-    }
-
-    if (!shippingAddress || typeof shippingAddress !== 'object' || Array.isArray(shippingAddress)) {
-      return res.status(400).json({ success: false, message: 'Please provide complete delivery shipping address information.' });
-    }
-    const address = shippingAddress as Record<string, unknown>;
-    const addressFields = ['fullName', 'phone', 'street', 'city', 'state', 'postalCode'] as const;
-    if (addressFields.some((field) => typeof address[field] !== 'string' || !(address[field] as string).trim())) {
-      return res.status(400).json({ success: false, message: 'Please provide complete delivery shipping address information.' });
-    }
-
-    const cleanPhone = (address.phone as string).replace(/\D/g, '');
+    const cleanPhone = shippingAddress.phone.replace(/\D/g, '');
     if (!cleanPhone || cleanPhone.length !== 10) {
       return res.status(400).json({ success: false, message: 'Contact phone number must be exactly 10 digits.' });
     }
 
-    if (paymentMethod !== 'Razorpay' && paymentMethod !== 'Local Demo') {
-      return res.status(400).json({ success: false, message: 'Choose Razorpay Test Mode or Local Demo payment.' });
-    }
-
     const normalizedAddress: ShippingAddress = {
-      fullName: (address.fullName as string).trim(),
-      phone: (address.phone as string).trim(),
-      street: (address.street as string).trim(),
-      city: (address.city as string).trim(),
-      district: typeof address.district === 'string' ? address.district.trim() : '',
-      state: (address.state as string).trim(),
-      postalCode: (address.postalCode as string).trim(),
-      country: typeof address.country === 'string' && address.country.trim() ? address.country.trim() : 'India',
+      fullName: shippingAddress.fullName,
+      phone: shippingAddress.phone.trim(),
+      street: shippingAddress.street,
+      city: shippingAddress.city,
+      district: shippingAddress.district?.trim() || '',
+      state: shippingAddress.state,
+      postalCode: shippingAddress.postalCode,
+      country: shippingAddress.country?.trim() || 'India',
     };
     const normalizedItems = orderItems.map((value) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-      const item = value as Record<string, unknown>;
-      const productId = typeof item.productId === 'string'
-        ? item.productId.trim()
-        : typeof item.product === 'string' ? item.product.trim() : '';
-      if (!productId || !Number.isInteger(item.quantity) || Number(item.quantity) < 1 || Number(item.quantity) > 99) {
-        return undefined;
-      }
-      return { productId, quantity: Number(item.quantity) };
+      const productId = (value.productId !== undefined ? value.productId : value.product || '').trim();
+      return productId ? { productId, quantity: value.quantity } : undefined;
     });
     if (normalizedItems.some((item) => !item)) {
       return res.status(400).json({ success: false, message: 'Each item must include a valid product and quantity.' });

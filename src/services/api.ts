@@ -1,4 +1,4 @@
-import { Product, User, Order, CartItem, SecurityTestResult, ShippingAddress } from '../types';
+import { Product, User, Order, CartItem, Review, SecurityTestResult, ShippingAddress } from '../types';
 
 const BASE_URL = '/api';
 
@@ -119,6 +119,28 @@ export const api = {
     const res = await fetch(`${BASE_URL}/products/${id}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Product not found');
+    return data;
+  },
+
+  async getProductReviews(id: string): Promise<{ success: boolean; data: Review[] }> {
+    const res = await fetch(`${BASE_URL}/products/${encodeURIComponent(id)}/reviews`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to fetch product reviews');
+    return data;
+  },
+
+  async createProductReview(id: string, review: { rating: number; comment: string }): Promise<{
+    success: boolean;
+    data: Review;
+    productRating: Pick<Product, 'rating' | 'numReviews'>;
+  }> {
+    const res = await fetch(`${BASE_URL}/products/${encodeURIComponent(id)}/reviews`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(review),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to submit product review');
     return data;
   },
 

@@ -40,8 +40,8 @@ test('registration, login, and protected profile routes validate and persist cre
     const address = server.address();
     assert.ok(address && typeof address !== 'string');
     const baseUrl = `http://127.0.0.1:${address.port}/api/auth`;
-    const send = (route: string, body?: unknown, token?: string) => fetch(`${baseUrl}${route}`, {
-      method: route === '/profile' && body === undefined ? 'GET' : 'POST',
+    const send = (route: string, body?: unknown, token?: string, method?: 'GET' | 'POST' | 'PUT') => fetch(`${baseUrl}${route}`, {
+      method: method || (route === '/profile' && body === undefined ? 'GET' : 'POST'),
       headers: {
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -55,15 +55,37 @@ test('registration, login, and protected profile routes validate and persist cre
       password: 'valid-password',
     });
     assert.equal(malformedRegister.status, 400);
+    assert.equal(
+      (await malformedRegister.json() as { message: string }).message,
+      'Please provide name, email, and password.',
+    );
 
     const malformedLogin = await send('/login', { email: 4, password: 'valid-password' });
     assert.equal(malformedLogin.status, 400);
+    assert.equal(
+      (await malformedLogin.json() as { message: string }).message,
+      'Please enter both email and password.',
+    );
+
+    for (const password of ['abc123', 'letters-only', '12345678']) {
+      const invalidPassword = await send('/register', {
+        name: 'Test Customer',
+        email: 'audit@example.invalid',
+        password,
+      });
+      assert.equal(invalidPassword.status, 400);
+      assert.equal(
+        (await invalidPassword.json() as { message: string }).message,
+        'Password must be at least 8 characters and include at least one letter and one number.',
+      );
+    }
+    assert.equal(createCalls, 0);
 
     process.env.JWT_SECRET = 'replace_with_a_private_random_secret_at_least_32_characters';
     const unavailableAuth = await send('/register', {
       name: 'Test Customer',
       email: 'audit@example.invalid',
-      password: 'valid-password',
+      password: 'Abc12345',
     });
     assert.equal(unavailableAuth.status, 503);
     assert.equal(createCalls, 0);
@@ -72,7 +94,7 @@ test('registration, login, and protected profile routes validate and persist cre
     const registration = await send('/register', {
       name: ' Test Customer ',
       email: ' Test.Customer@Example.invalid ',
-      password: 'valid-password',
+      password: 'Abc12345',
       phone: '123-456-7890',
     });
     assert.equal(registration.status, 201);
@@ -80,12 +102,12 @@ test('registration, login, and protected profile routes validate and persist cre
     assert.equal(registrationData.user.name, 'Test Customer');
     assert.equal(registrationData.user.email, 'test.customer@example.invalid');
     assert.equal(registrationData.user.password, undefined);
-    assert.ok(await bcrypt.compare('valid-password', users.get(registrationData.user.email)!.password!));
+    assert.ok(await bcrypt.compare('Abc12345', users.get(registrationData.user.email)!.password!));
 
     const duplicate = await send('/register', {
       name: 'Test Customer',
       email: 'test.customer@example.invalid',
-      password: 'valid-password',
+      password: 'Abc12345',
     });
     assert.equal(duplicate.status, 409);
 
@@ -98,18 +120,28 @@ test('registration, login, and protected profile routes validate and persist cre
     process.env.JWT_SECRET = 'replace_with_a_private_random_secret_at_least_32_characters';
     const unavailableLogin = await send('/login', {
       email: 'test.customer@example.invalid',
-      password: 'valid-password',
+      password: 'Abc12345',
     });
     assert.equal(unavailableLogin.status, 503);
     process.env.JWT_SECRET = 'auth-route-test-secret-that-is-at-least-32-characters';
 
     const login = await send('/login', {
       email: ' TEST.CUSTOMER@example.invalid ',
-      password: 'valid-password',
+      password: 'Abc12345',
     });
     assert.equal(login.status, 200);
     const loginData = await login.json() as { token: string; user: User };
     assert.equal(loginData.user.password, undefined);
+
+    const invalidPasswordUpdate = await send('/profile', {
+      currentPassword: 'Abc12345',
+      newPassword: 'letters-only',
+    }, loginData.token, 'PUT');
+    assert.equal(invalidPasswordUpdate.status, 400);
+    assert.equal(
+      (await invalidPasswordUpdate.json() as { message: string }).message,
+      'New password must be at least 8 characters and include at least one letter and one number.',
+    );
 
     const unauthorizedProfile = await send('/profile');
     assert.equal(unauthorizedProfile.status, 401);

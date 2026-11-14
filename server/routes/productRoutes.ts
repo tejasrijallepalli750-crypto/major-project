@@ -2,10 +2,16 @@ import { Router, Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { db, getDatabaseErrorStatus } from '../db/database';
-import { requireAuth, requireAdmin } from '../middleware/auth';
+import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
+import { hasEligibleReviewOrder } from '../reviews/reviewRules';
+import { z } from 'zod';
 
 const router = Router();
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
+const reviewBodySchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().trim().min(1).max(2000),
+});
 
 const isLocalProductImage = (image: string): boolean => {
   if (!image.startsWith('/images/') || image.startsWith('//')) return false;
@@ -63,6 +69,60 @@ router.get('/admin/all', requireAuth, requireAdmin, async (_req: Request, res: R
   } catch (error) {
     console.error('[Products] Admin catalog fetch error:', error);
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to fetch the product management catalog.' });
+  }
+});
+
+// GET /api/products/:id/reviews
+router.get('/:id/reviews', async (req: Request, res: Response) => {
+  try {
+    const product = await db.findProductById(req.params.id);
+    if (!product || product.status !== 'active') {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+    const reviews = await db.findProductReviews(product.id);
+    return res.json({ success: true, data: reviews });
+  } catch (error) {
+    console.error('[Products] Review fetch error:', error);
+    return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to fetch product reviews.' });
+  }
+});
+
+// POST /api/products/:id/reviews
+router.post('/:id/reviews', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const bodyResult = reviewBodySchema.safeParse(req.body);
+  if (!bodyResult.success) {
+    return res.status(400).json({ success: false, message: 'Rating must be a whole number from 1 to 5 and comment must be 1 to 2000 characters.' });
+  }
+
+  try {
+    const product = await db.findProductById(req.params.id);
+    if (!product || product.status !== 'active') {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+
+    const orders = await db.findOrdersByUser(req.user!.id);
+    if (!hasEligibleReviewOrder(orders, product.id)) {
+      return res.status(403).json({ success: false, message: 'You can review this product only after a paid or delivered order containing it.' });
+    }
+
+    const created = await db.createProductReview({
+      productId: product.id,
+      userId: req.user!.id,
+      userName: req.user!.name,
+      rating: bodyResult.data.rating,
+      comment: bodyResult.data.comment,
+    });
+    return res.status(201).json({
+      success: true,
+      data: created.review,
+      productRating: { rating: created.rating, numReviews: created.numReviews },
+    });
+  } catch (error) {
+    if ((error as { code?: number }).code === 11000) {
+      return res.status(409).json({ success: false, message: 'You have already reviewed this product.' });
+    }
+    console.error('[Products] Review creation error:', error);
+    return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to submit product review.' });
   }
 });
 

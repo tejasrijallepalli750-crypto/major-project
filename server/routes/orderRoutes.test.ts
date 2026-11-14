@@ -162,6 +162,17 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     assert.equal(validatedCart.data.items[0].inventoryMode, 'simulated-demo');
 
     const token = generateToken(user);
+    const invalidBody = await send({
+      ...payload,
+      orderItems: [{ productId: product.id, quantity: '2' }],
+    }, token);
+    assert.equal(invalidBody.status, 400);
+    assert.equal(
+      (await invalidBody.json() as { message: string }).message,
+      'Each item must include a valid product and quantity.',
+    );
+    assert.equal(createCalls, 0);
+
     const first = await send(payload, token);
     assert.equal(first.status, 201);
     const firstOrder = (await first.json() as { data: Order }).data;

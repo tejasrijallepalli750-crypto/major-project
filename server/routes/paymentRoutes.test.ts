@@ -83,6 +83,25 @@ test('payment routes enforce authentication, ownership, demo outcomes, and unpai
     assert.ok(address && typeof address !== 'string');
     const url = `http://127.0.0.1:${address.port}/api/payment/create-order`;
     const token = generateToken(user);
+    const invalidVerification = await fetch(`http://127.0.0.1:${address.port}/api/payment/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        orderId: order.id,
+        razorpay_order_id: 'order_test',
+        razorpay_payment_id: 3,
+        razorpay_signature: 'signature',
+      }),
+    });
+    assert.equal(invalidVerification.status, 400);
+    assert.equal(
+      (await invalidVerification.json() as { message: string }).message,
+      'The payment response is incomplete or invalid.',
+    );
+
     const send = (authorization?: string) => fetch(url, {
       method: 'POST',
       headers: {
