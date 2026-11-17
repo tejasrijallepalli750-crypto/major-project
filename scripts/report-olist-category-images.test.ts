@@ -36,10 +36,11 @@ test('coverage checks every mapped source category and counts uncategorized reco
   assert.equal(coverage.sourceProductCount, 74);
   assert.equal(coverage.sourceCategoryCount, 73);
   assert.equal(coverage.uncategorizedProductCount, 1);
-  assert.equal(coverage.categoriesWithApprovedPhotos, 0);
-  assert.equal(coverage.categoriesUsingIllustrations, 74);
+  assert.equal(coverage.categoriesWithApprovedPhotos, 24);
+  assert.equal(coverage.categoriesUsingIllustrations, 50);
   assert.equal(coverage.categoriesMissingImages, 0);
-  assert.equal(coverage.productsUsingCategoryIllustrations, 74);
+  assert.equal(coverage.productsWithApprovedCategoryPhotos, 24);
+  assert.equal(coverage.productsUsingCategoryIllustrations, 50);
   assert.equal(coverage.productsMissingCategoryImages, 0);
   assert.throws(() => buildOlistCategoryCoverage(
     [sourceProduct('unmapped', 'unmapped-category')],

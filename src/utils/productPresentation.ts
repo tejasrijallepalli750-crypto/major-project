@@ -57,8 +57,13 @@ export type OlistCategoryDefinitionWithPhoto = OlistCategoryImageDefinition & {
 export const isOlistEnrichedImagePath = (image: string): boolean =>
   /^\/images\/olist-enriched\/OLIST-[a-f\d]{32}\.webp$/i.test(image);
 
-export const hasSimulatedOlistInventory = (mode: string | undefined): boolean =>
-  mode === OLIST_SIMULATED_INVENTORY_MODE;
+export const isInventoryVerified = (status: string | undefined): boolean =>
+  status === 'verified';
+
+export const hasSimulatedOlistInventory = (
+  mode: string | undefined,
+  status?: string,
+): boolean => mode === OLIST_SIMULATED_INVENTORY_MODE && !isInventoryVerified(status);
 
 export const isManagedOlistCatalogProduct = (
   sku: string,
@@ -122,7 +127,7 @@ export const getCategoryArtPath = (category: string): string => {
 const getIllustrationPath = (family: CategoryIllustrationFamily): string =>
   `/images/catalog-category-art/${family}.svg`;
 
-const isApprovedPhotoComplete = (
+export const isApprovedOlistCategoryPhoto = (
   photo: ApprovedOlistCategoryPhoto | undefined,
 ): photo is ApprovedOlistCategoryPhoto => {
   const pathIsLocalReviewedPhoto = photo?.path.startsWith('/images/olist-category-photos/')
@@ -167,7 +172,7 @@ export const getOlistCategoryImage = (category: string | undefined): OlistCatego
     : undefined;
   const fallbackDefinition = definition || categoryDefinitionByAlias.get('uncategorized');
   const illustrationPath = getIllustrationPath(fallbackDefinition?.illustrationFamily || 'general');
-  if (fallbackDefinition && isApprovedPhotoComplete(fallbackDefinition.approvedPhoto)) {
+  if (fallbackDefinition && isApprovedOlistCategoryPhoto(fallbackDefinition.approvedPhoto)) {
     return {
       path: fallbackDefinition.approvedPhoto.path,
       sourceType: 'approved-photo',
@@ -189,12 +194,15 @@ export const getOlistCategoryPhotoPath = (sourceCategory: string): string | unde
 export const isOlistCategoryPhotoPath = (image: string): boolean =>
   OLIST_CATEGORY_IMAGE_MAP.some((definition) => {
     const withPhoto = definition as OlistCategoryDefinitionWithPhoto;
-    return isApprovedPhotoComplete(withPhoto.approvedPhoto)
+    return isApprovedOlistCategoryPhoto(withPhoto.approvedPhoto)
       && withPhoto.approvedPhoto.path === image;
   });
 
 export const isOlistCatalogueProductSku = (sku: string): boolean =>
   sku.toUpperCase().startsWith('OLIST-');
+
+export const isEstimatedOlistPrice = (sku: string): boolean =>
+  isOlistCatalogueProductSku(sku);
 
 export const usesSharedOlistCatalogImage = (sku: string, image: string): boolean =>
   isOlistCatalogueProductSku(sku)

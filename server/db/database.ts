@@ -88,6 +88,10 @@ const productFromDocument = (document: IProductDocument): Product => ({
   sku: String(document.sku),
   status: document.status === 'inactive' ? 'inactive' : 'active',
   inventoryMode: document.inventoryMode === 'simulated-demo' ? 'simulated-demo' : undefined,
+  inventoryStatus: document.inventoryStatus === 'verified' ? 'verified' : 'unverified',
+  inventoryVerifiedAt: document.inventoryVerifiedAt
+    ? normalizeDate(document.inventoryVerifiedAt as Date | string)
+    : undefined,
   rating: Number(document.rating || 0),
   numReviews: Number(document.numReviews || 0),
   brand: String(document.brand || ''),
@@ -290,6 +294,7 @@ class MongoDatabase {
         stock: product.stock,
         sku: product.sku,
         inventoryMode: product.inventoryMode,
+        inventoryStatus: product.inventoryStatus,
       });
     }
     return items;
@@ -348,7 +353,8 @@ class MongoDatabase {
     if (options.category && options.category !== 'All') filter.category = new RegExp(`^${options.category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
     if (options.search) {
       const escaped = options.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.$or = ['name', 'description', 'sku', 'brand'].map((field) => ({ [field]: { $regex: escaped, $options: 'i' } }));
+      filter.$or = ['name', 'description', 'sku', 'brand', 'category']
+        .map((field) => ({ [field]: { $regex: escaped, $options: 'i' } }));
     }
     const sort: Record<string, 1 | -1> = options.sort === 'price-low' ? { price: 1 }
       : options.sort === 'price-high' ? { price: -1 }
@@ -437,6 +443,27 @@ class MongoDatabase {
     const updated = await ProductModel.findOneAndUpdate(
       { id },
       update,
+      { new: true, runValidators: true },
+    ).lean().exec();
+    return updated ? productFromDocument(updated) : undefined;
+  }
+
+  public async updateProductInventory(
+    id: string,
+    stock: number,
+    verifiedBy: string,
+  ): Promise<Product | undefined> {
+    this.assertConnected();
+    const updated = await ProductModel.findOneAndUpdate(
+      { id },
+      {
+        $set: {
+          stock,
+          inventoryStatus: 'verified',
+          inventoryVerifiedAt: new Date(),
+          inventoryVerifiedBy: verifiedBy,
+        },
+      },
       { new: true, runValidators: true },
     ).lean().exec();
     return updated ? productFromDocument(updated) : undefined;
@@ -732,6 +759,16 @@ class MongoDatabase {
       { new: true, runValidators: true },
     ).lean().exec();
     return order ? orderFromDocument(order) : undefined;
+  }
+
+  public async getHealthCounts() {
+    this.assertConnected();
+    const [totalProducts, totalOrders, totalCustomers] = await Promise.all([
+      ProductModel.countDocuments(),
+      OrderModel.countDocuments(),
+      UserModel.countDocuments({ role: 'customer' }),
+    ]);
+    return { totalProducts, totalOrders, totalCustomers };
   }
 
   public async getAdminStats() {

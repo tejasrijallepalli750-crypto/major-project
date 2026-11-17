@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Zap, Clock, Star, ShoppingBag, Check, ChevronRight } from 'lucide-react';
 import { Product } from '../types';
+import { isInventoryVerified } from '../utils/productPresentation';
 import { useCart } from '../context/CartContext';
 
 interface FlashDealsCountdownProps {
@@ -37,7 +38,7 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
 
   const handleQuickAdd = (e: React.MouseEvent, prod: Product) => {
     e.stopPropagation();
-    if (prod.stock > 0) {
+    if (isInventoryVerified(prod.inventoryStatus) && prod.stock > 0) {
       addToCart(prod, 1);
       setAddedIds((prev) => ({ ...prev, [prod.id]: true }));
       setTimeout(() => setAddedIds((prev) => ({ ...prev, [prod.id]: false })), 1500);

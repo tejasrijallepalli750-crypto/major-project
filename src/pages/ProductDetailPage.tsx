@@ -6,7 +6,12 @@ import { Review } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
-import { formatCategoryLabel, hasSimulatedOlistInventory } from '../utils/productPresentation';
+import {
+  formatCategoryLabel,
+  hasSimulatedOlistInventory,
+  isEstimatedOlistPrice,
+  isInventoryVerified,
+} from '../utils/productPresentation';
 import { ProductImage } from '../components/ProductImage';
 import { BackButton } from '../components/BackButton';
 
@@ -138,8 +143,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
     );
   }
 
+  const inventoryVerified = isInventoryVerified(product.inventoryStatus);
+  const canPurchase = inventoryVerified && product.stock > 0;
+
   const handleAddToCart = () => {
-    if (product.stock > 0) {
+    if (canPurchase) {
       addToCart(product, quantity);
       setJustAdded(true);
       setTimeout(() => setJustAdded(false), 1800);
@@ -147,7 +155,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   };
 
   const handleBuyNow = () => {
-    if (product.stock > 0) {
+    if (canPurchase) {
       addToCart(product, quantity);
       onCheckout();
     }
@@ -214,14 +222,16 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </div>}
               <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
                 <span className="text-slate-500">Inventory Status:</span>
-                <span className={`font-semibold ${product.stock > 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                  {product.stock > 0 ? `${product.stock} units available` : 'Out of stock'}
+                <span className={`font-semibold ${canPurchase ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {!inventoryVerified ? 'Inventory not verified' : canPurchase ? `${product.stock} units available` : 'Out of stock'}
                 </span>
               </div>
             </div>
-            {hasSimulatedOlistInventory(product.inventoryMode) && (
+            {!inventoryVerified && (
               <p className="mt-3 text-xs font-medium text-amber-700">
-                Inventory quantity is simulated for demonstration and is not supplied by Olist.
+                {hasSimulatedOlistInventory(product.inventoryMode, product.inventoryStatus)
+                  ? 'This demo quantity is not physically verified and is not supplied by Olist.'
+                  : 'This quantity is unavailable until an administrator physically verifies inventory.'}
               </p>
             )}
 
@@ -273,6 +283,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 ₹{product.price.toLocaleString('en-IN')}
               </span>
             </div>
+            {isEstimatedOlistPrice(product.sku) && (
+              <p className="mt-1 text-xs text-amber-700">
+                Historical price estimate from Olist orders; not an original or current market price.
+              </p>
+            )}
           </div>
 
           {/* Prose Description */}
@@ -285,7 +300,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-700">Select Quantity</span>
               <span className="text-xs text-slate-500">
-                {product.stock > 0 ? `${product.stock} units in stock` : 'Out of stock'}
+                {!inventoryVerified ? 'Inventory not verified' : canPurchase ? `${product.stock} units in stock` : 'Out of stock'}
               </span>
             </div>
 
@@ -300,7 +315,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <span className="px-4 text-xs font-bold font-mono tabular-nums">{quantity}</span>
                 <button
                   onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
-                  disabled={quantity >= product.stock}
+                  disabled={!canPurchase || quantity >= product.stock}
                   className="px-3 py-2 text-slate-600 hover:text-slate-900 cursor-pointer font-bold disabled:opacity-30"
                 >
                   +
@@ -326,9 +341,9 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </button>
             <button
               onClick={handleAddToCart}
-              disabled={product.stock === 0}
+              disabled={!canPurchase}
               className={`w-full py-3 px-4 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer ${
-                product.stock === 0
+                !canPurchase
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                   : justAdded
                   ? 'bg-emerald-600 text-white'
@@ -343,14 +358,14 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               ) : (
                 <>
                   <ShoppingBag className="w-4 h-4" />
-                  <span>Add to Shopping Cart</span>
+                  <span>{canPurchase ? 'Add to Shopping Cart' : 'Inventory not verified'}</span>
                 </>
               )}
             </button>
 
             <button
               onClick={handleBuyNow}
-              disabled={product.stock === 0}
+              disabled={!canPurchase}
               className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-40"
             >
               Buy now
@@ -520,15 +535,19 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   <span className="text-sm font-extrabold text-slate-900 font-mono">
                     ₹{rec.price.toLocaleString('en-IN')}
                   </span>
+                  {isEstimatedOlistPrice(rec.sku) && (
+                    <span className="text-[10px] text-amber-700">Historical estimate</span>
+                  )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       addToCart(rec, 1);
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                    disabled={!isInventoryVerified(rec.inventoryStatus) || rec.stock < 1}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ShoppingBag className="w-3 h-3" />
-                    <span>Add</span>
+                    <span>{isInventoryVerified(rec.inventoryStatus) && rec.stock > 0 ? 'Add' : 'Unavailable'}</span>
                   </button>
                 </div>
               </div>

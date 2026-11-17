@@ -137,12 +137,7 @@ app.get('/api/health', async (_req, res) => {
     const connected = await db.ping();
     let counts: { totalProducts: number; totalOrders: number; totalCustomers: number } | undefined;
     if (connected) {
-      const stats = await db.getAdminStats();
-      counts = {
-        totalProducts: stats.totalProducts,
-        totalOrders: stats.totalOrders,
-        totalCustomers: stats.totalCustomers,
-      };
+      counts = await db.getHealthCounts();
     }
     return res.status(connected ? 200 : 503).json({
       status: connected ? 'healthy' : 'degraded',

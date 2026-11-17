@@ -2,6 +2,7 @@ export interface StockAllocationOperation {
   filter: {
     id: string;
     status: 'active';
+    inventoryStatus: 'verified';
     stock: { $gte: number };
   };
   update: {
@@ -14,7 +15,7 @@ export const makeStockAllocationOperation = (productId: string, quantity: number
     throw new RangeError('Stock allocation requires a product ID and a positive whole quantity.');
   }
   return {
-    filter: { id: productId, status: 'active', stock: { $gte: quantity } },
+    filter: { id: productId, status: 'active', inventoryStatus: 'verified', stock: { $gte: quantity } },
     update: { $inc: { stock: -quantity } },
   };
 };

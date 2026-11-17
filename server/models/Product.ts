@@ -12,6 +12,9 @@ export interface IProductDocument {
   sku: string;
   status: 'active' | 'inactive';
   inventoryMode?: 'simulated-demo';
+  inventoryStatus?: 'verified' | 'unverified';
+  inventoryVerifiedAt?: Date | string;
+  inventoryVerifiedBy?: string;
   rating: number;
   numReviews: number;
   brand: string;
@@ -33,6 +36,9 @@ const productSchema = new Schema<IProductDocument>(
     sku: { type: String, required: true, unique: true, trim: true, uppercase: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
     inventoryMode: { type: String, enum: ['simulated-demo'] },
+    inventoryStatus: { type: String, enum: ['verified', 'unverified'], default: 'unverified' },
+    inventoryVerifiedAt: { type: Date },
+    inventoryVerifiedBy: { type: String },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     numReviews: { type: Number, default: 0, min: 0 },
     brand: { type: String, default: 'AURA', trim: true },

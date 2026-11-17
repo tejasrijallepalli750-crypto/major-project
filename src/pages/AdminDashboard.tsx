@@ -24,6 +24,7 @@ import { api } from '../services/api';
 import { Product, Order } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
+import { isEstimatedOlistPrice } from '../utils/productPresentation';
 import { BackButton } from '../components/BackButton';
 
 interface AdminDashboardProps {
@@ -35,6 +36,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'dataset'>('overview');
   const [stats, setStats] = useState<any | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productSearch, setProductSearch] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const [productTotal, setProductTotal] = useState(0);
+  const [productTotalPages, setProductTotalPages] = useState(1);
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -53,12 +58,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   // Product Add / Edit Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [inventoryProduct, setInventoryProduct] = useState<Product | null>(null);
+  const [inventoryStock, setInventoryStock] = useState('');
+  const [inventoryConfirmed, setInventoryConfirmed] = useState(false);
+  const [isSavingInventory, setIsSavingInventory] = useState(false);
   const [productForm, setProductForm] = useState({
     name: '',
     description: '',
     price: 0,
     category: 'Computers & Accessories',
-    stock: 20,
     sku: '',
     image: '',
     brand: 'AURA Custom',
@@ -70,12 +78,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     try {
       const [statsRes, prodRes, ordersRes, datasetRes] = await Promise.all([
         api.getAdminStats(),
-        api.getProducts({ limit: 1000, includeInactive: true }),
+        api.getProducts({
+          search: productSearch || undefined,
+          page: productPage,
+          limit: 50,
+          includeInactive: true,
+        }),
         api.getAllOrders(),
         api.getDatasetStatus(),
       ]);
       setStats(statsRes.data);
       setProducts(prodRes.data);
+      setProductTotal(prodRes.total);
+      setProductTotalPages(prodRes.totalPages);
       setOrders(ordersRes.data);
       if (datasetRes && datasetRes.success) {
         setDatasetInfo(datasetRes);
@@ -89,6 +104,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const fetchProductPage = async (search: string, page: number) => {
+    try {
+      const result = await api.getProducts({
+        search: search || undefined,
+        page,
+        limit: 50,
+        includeInactive: true,
+      });
+      setProducts(result.data);
+      setProductTotal(result.total);
+      setProductTotalPages(result.totalPages);
+      setProductPage(result.page);
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : 'Failed to load product results.',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleProductSearch = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const search = productSearch.trim();
+    setProductSearch(search);
+    setProductPage(1);
+    await fetchProductPage(search, 1);
   };
 
   const handleSyncDataset = async () => {
@@ -191,7 +234,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       description: '',
       price: 1999,
       category: 'Computers & Accessories',
-      stock: 25,
       sku: `SKU-${Date.now().toString().slice(-6)}`,
       image: '',
       brand: 'AURA Signature',
@@ -207,7 +249,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
       description: prod.description,
       price: prod.price,
       category: prod.category,
-      stock: prod.stock,
       sku: prod.sku,
       image: prod.image,
       brand: prod.brand,
@@ -223,13 +264,47 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         await api.updateProduct(editingProductId, productForm);
         setMessage({ text: 'Product updated successfully in database.', type: 'success' });
       } else {
-        await api.createProduct(productForm);
+        await api.createProduct({ ...productForm, stock: 0 });
         setMessage({ text: 'New product added to catalog successfully.', type: 'success' });
       }
       setIsProductModalOpen(false);
       fetchData();
     } catch (err: any) {
       setMessage({ text: err.message || 'Failed to save product.', type: 'error' });
+    }
+  };
+
+  const handleOpenInventory = (product: Product) => {
+    setInventoryProduct(product);
+    setInventoryStock(product.inventoryStatus === 'verified' ? String(product.stock) : '');
+    setInventoryConfirmed(false);
+  };
+
+  const handleSaveInventory = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!inventoryProduct || !inventoryConfirmed) return;
+    const stock = Number(inventoryStock);
+    if (!Number.isSafeInteger(stock) || stock < 0 || stock > 1000000) {
+      setMessage({ text: 'Enter a whole-number physical count from 0 to 1,000,000.', type: 'error' });
+      return;
+    }
+
+    setIsSavingInventory(true);
+    try {
+      await api.updateProductInventory(inventoryProduct.id, { stock, confirmPhysicalCount: true });
+      setMessage({
+        text: `Verified available quantity for "${inventoryProduct.name}" was saved.`,
+        type: 'success',
+      });
+      setInventoryProduct(null);
+      await fetchData();
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : 'Failed to save verified inventory.',
+        type: 'error',
+      });
+    } finally {
+      setIsSavingInventory(false);
     }
   };
 
@@ -522,6 +597,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 </button>
               </div>
 
+              <form onSubmit={handleProductSearch} className="flex gap-2">
+                <label htmlFor="admin-product-search" className="sr-only">Search products by name or SKU</label>
+                <input
+                  id="admin-product-search"
+                  type="search"
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Search products by name, SKU, or category"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+                <button type="submit" className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white">
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </form>
+
               {/* Product Table */}
               <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
@@ -555,19 +646,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                           <td className="p-4 text-slate-600">{p.category}</td>
                           <td className="p-4 font-mono font-bold text-slate-900 tabular-nums">
                             ₹{p.price.toLocaleString('en-IN')}
+                            {isEstimatedOlistPrice(p.sku) && (
+                              <p className="mt-1 font-sans text-[10px] font-medium text-amber-700">Historical Olist estimate</p>
+                            )}
                           </td>
                           <td className="p-4">
-                            <span
-                              className={`font-mono font-semibold ${
-                                p.stock === 0
-                                  ? 'text-rose-600'
-                                  : p.stock < 10
-                                  ? 'text-amber-600'
-                                  : 'text-emerald-700'
-                              }`}
-                            >
-                              {p.stock} in stock
+                            <span className={`font-semibold ${p.inventoryStatus === 'verified' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                              {p.inventoryStatus === 'verified' ? `${p.stock} verified available` : `Unverified quantity: ${p.stock}`}
                             </span>
+                            {p.inventoryVerifiedAt && (
+                              <p className="mt-1 text-[10px] text-slate-400">
+                                Checked {new Date(p.inventoryVerifiedAt).toLocaleDateString('en-IN')}
+                              </p>
+                            )}
                           </td>
                           <td className="p-4 font-mono text-[11px] text-slate-500">{p.sku}</td>
                           <td className="p-4">
@@ -577,6 +668,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                           </td>
                           <td className="p-4">
                             <div className="flex items-center gap-2">
+                              <button type="button" onClick={() => handleOpenInventory(p)} aria-label={`Verify inventory for ${p.name}`} className="rounded-md p-1.5 text-amber-700 hover:bg-amber-50">
+                                <Package className="h-4 w-4" />
+                              </button>
                               <button type="button" onClick={() => handleOpenEditProduct(p)} aria-label={`Edit ${p.name}`} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100">
                                 <Edit2 className="h-4 w-4" />
                               </button>
@@ -589,6 +683,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+                  <span>{productTotal.toLocaleString('en-IN')} products · page {productPage} of {productTotalPages}</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={productPage <= 1}
+                      onClick={() => { const page = productPage - 1; setProductPage(page); void fetchProductPage(productSearch, page); }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={productPage >= productTotalPages}
+                      onClick={() => { const page = productPage + 1; setProductPage(page); void fetchProductPage(productSearch, page); }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -895,7 +1010,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   <p>• <strong>name</strong> (Required): Product title (e.g. &quot;AURA Wireless Headphones&quot;)</p>
                   <p>• <strong>price</strong> (Required): Price in INR (e.g. &quot;4999&quot;)</p>
                   <p>• <strong>category</strong>: Category name (e.g. &quot;Electronics&quot;, &quot;Audio &amp; Wearables&quot;)</p>
-                  <p>• <strong>stock</strong>: Available inventory count (default: 20)</p>
+                  <p>• <strong>stock</strong>: Unverified source quantity only; not sellable until an administrator records a physical count</p>
                   <p>• <strong>sku</strong>: Unique product code (automatically generated if omitted)</p>
                   <p>• <strong>image</strong>: Image URL or studio asset path (fallback applied if omitted)</p>
                 </div>
@@ -957,17 +1072,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Stock Quantity</label>
-                  <input
-                    type="number"
-                    required
-                    min={0}
-                    value={productForm.stock}
-                    onChange={(e) => setProductForm({ ...productForm, stock: Number(e.target.value) })}
-                    className="w-full text-xs font-mono px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg"
-                  />
-                </div>
+                <p className="self-end pb-2 text-[10px] text-slate-500">
+                  New listings start with zero stock. Use inventory management after a physical count.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1036,6 +1143,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg cursor-pointer"
                 >
                   Save Product
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {inventoryProduct && (
+        <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
+          <div onClick={() => setInventoryProduct(null)} className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs" />
+          <div className="relative z-10 w-full max-w-md space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Verify Physical Inventory</h3>
+                <p className="mt-1 text-xs text-slate-500">{inventoryProduct.name}</p>
+              </div>
+              <button type="button" onClick={() => setInventoryProduct(null)} aria-label="Close inventory dialog" className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveInventory} className="space-y-4">
+              <p className="text-xs leading-relaxed text-amber-800">
+                Enter the physically counted quantity available for sale after accounting for units already reserved by pending orders. Imported or demo quantities are not carried forward.
+              </p>
+              <div>
+                <label htmlFor="verified-stock" className="mb-1 block text-xs font-semibold text-slate-700">
+                  Verified available quantity
+                </label>
+                <input
+                  id="verified-stock"
+                  type="number"
+                  min={0}
+                  max={1000000}
+                  step={1}
+                  required
+                  value={inventoryStock}
+                  onChange={(event) => setInventoryStock(event.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs"
+                />
+              </div>
+              <label className="flex items-start gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={inventoryConfirmed}
+                  onChange={(event) => setInventoryConfirmed(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>I physically counted this product and entered its available-to-sell quantity.</span>
+              </label>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setInventoryProduct(null)} className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!inventoryConfirmed || isSavingInventory}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingInventory ? 'Saving…' : 'Save Verified Count'}
                 </button>
               </div>
             </form>

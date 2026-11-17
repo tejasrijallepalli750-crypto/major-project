@@ -28,6 +28,8 @@ export interface Product {
   sku: string;
   status: 'active' | 'inactive';
   inventoryMode?: 'simulated-demo';
+  inventoryStatus?: 'verified' | 'unverified';
+  inventoryVerifiedAt?: string;
   rating: number;
   numReviews: number;
   brand: string;
@@ -56,6 +58,7 @@ export interface CartItem {
   stock: number;
   sku: string;
   inventoryMode?: 'simulated-demo';
+  inventoryStatus?: 'verified' | 'unverified';
 }
 
 export interface ShippingAddress {
@@ -78,6 +81,7 @@ export interface OrderItem {
   sku: string;
   category?: string;
   inventoryMode?: 'simulated-demo';
+  inventoryStatus?: 'verified' | 'unverified';
 }
 
 export interface PaymentResult {

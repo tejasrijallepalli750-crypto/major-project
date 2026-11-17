@@ -3,7 +3,12 @@ import { Sparkles, Star, ShoppingBag, Check, ArrowRight } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { ProductImage } from './ProductImage';
-import { formatCategoryLabel, getCategoryArtFamily } from '../utils/productPresentation';
+import {
+  formatCategoryLabel,
+  getCategoryArtFamily,
+  isEstimatedOlistPrice,
+  isInventoryVerified,
+} from '../utils/productPresentation';
 
 interface RecommendationsSectionProps {
   products: Product[];
@@ -20,10 +25,12 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   const { addToCart } = useCart();
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [addedProductIds, setAddedProductIds] = useState<Record<string, boolean>>({});
+  const canPurchase = (product: Product): boolean =>
+    isInventoryVerified(product.inventoryStatus) && product.stock > 0;
 
   const handleAddToCart = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
-    if (product.stock > 0) {
+    if (canPurchase(product)) {
       addToCart(product, 1);
       setAddedProductIds((prev) => ({ ...prev, [product.id]: true }));
       setTimeout(() => {
@@ -151,6 +158,9 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
                         ₹{product.price.toLocaleString('en-IN')}
                       </span>
                     </div>
+                    {isEstimatedOlistPrice(product.sku) && (
+                      <p className="text-[10px] text-amber-700">Historical price estimate</p>
+                    )}
 
                     {product.numReviews > 0 && (
                       <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
@@ -163,9 +173,9 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
 
                   <button
                     onClick={(e) => handleAddToCart(e, product)}
-                    disabled={product.stock === 0}
+                    disabled={!canPurchase(product)}
                     className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap shadow-xs ${
-                      product.stock === 0
+                      !canPurchase(product)
                         ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                         : isAdded
                         ? 'bg-emerald-600 text-white'

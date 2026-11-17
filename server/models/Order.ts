@@ -19,6 +19,7 @@ export interface IOrderDocument {
     sku: string;
     category?: string;
     inventoryMode?: 'simulated-demo';
+    inventoryStatus?: 'verified' | 'unverified';
   }>;
   shippingAddress: {
     fullName: string;
@@ -69,6 +70,7 @@ const orderItemSchema = new Schema(
     sku: { type: String, required: true },
     category: { type: String, default: '' },
     inventoryMode: { type: String, enum: ['simulated-demo'] },
+    inventoryStatus: { type: String, enum: ['verified', 'unverified'] },
   },
   { _id: false },
 );

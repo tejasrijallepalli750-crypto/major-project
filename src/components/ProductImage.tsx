@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { ImageOff } from 'lucide-react';
 import {
   getCategoryArtPath,
   getOlistCategoryImage,
@@ -56,7 +57,13 @@ export const ProductImage: React.FC<ProductImageProps> = ({
           loading={loading}
         />
       ) : (
-        <div className="h-full w-full bg-white" role="img" aria-label={`${name} image unavailable`}>
+        <div
+          className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100 text-slate-500"
+          role="img"
+          aria-label={`${name} image unavailable`}
+        >
+          <ImageOff className="h-8 w-8" aria-hidden="true" />
+          <span className="text-[10px] font-medium">Image unavailable</span>
         </div>
       )}
       {isOlistProduct && (

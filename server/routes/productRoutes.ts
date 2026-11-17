@@ -12,6 +12,10 @@ const reviewBodySchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().trim().min(1).max(2000),
 });
+const inventoryBodySchema = z.object({
+  stock: z.number().int().min(0).max(1000000),
+  confirmPhysicalCount: z.literal(true),
+}).strict();
 
 const isLocalProductImage = (image: string): boolean => {
   if (!image.startsWith('/images/') || image.startsWith('//')) return false;
@@ -56,9 +60,16 @@ router.get('/categories/list', async (_req: Request, res: Response) => {
   }
 });
 
-router.get('/admin/all', requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+router.get('/admin/all', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
-    const result = await db.findProducts({ page: 1, limit: 1000 });
+    const { search, category, sort, page, limit } = req.query;
+    const result = await db.findProducts({
+      search: search ? String(search) : undefined,
+      category: category ? String(category) : undefined,
+      sort: sort ? String(sort) : undefined,
+      page: page ? Number(page) : 1,
+      limit: limit ? Number(limit) : 50,
+    });
     return res.json({
       success: true,
       data: result.products,
@@ -157,8 +168,11 @@ router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) 
     }
 
     if (!Number.isFinite(Number(price)) || Number(price) <= 0
-      || !Number.isInteger(Number(stock)) || Number(stock) < 0) {
-      return res.status(400).json({ success: false, message: 'Price and stock quantity must be non-negative.' });
+      || typeof stock !== 'number' || stock !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'New products must start with zero stock. Record a physically verified quantity using inventory management.',
+      });
     }
     if (!isLocalProductImage(String(image))) {
       return res.status(400).json({ success: false, message: 'Choose a valid product image stored under public/images/.' });
@@ -173,9 +187,10 @@ router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) 
       price: Number(price),
       category: category.trim(),
       image,
-      stock: Number(stock),
+      stock: 0,
       sku: sku.trim(),
       status: status || 'active',
+      inventoryStatus: 'unverified',
       rating: 0,
       numReviews: 0,
       brand: brand || 'AURA Signature',
@@ -192,10 +207,41 @@ router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) 
   }
 });
 
+// PUT /api/products/:id/inventory (Admin Only)
+router.put('/:id/inventory', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const bodyResult = inventoryBodySchema.safeParse(req.body);
+  if (!bodyResult.success) {
+    return res.status(400).json({
+      success: false,
+      message: 'Provide a whole-number physical count and confirm that it was verified.',
+    });
+  }
+  try {
+    const updated = await db.updateProductInventory(
+      req.params.id,
+      bodyResult.data.stock,
+      req.user!.id,
+    );
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+    return res.json({ success: true, message: 'Verified inventory quantity saved.', data: updated });
+  } catch (error) {
+    console.error('[Products] Inventory update error:', error);
+    return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to save verified inventory.' });
+  }
+});
+
 // PUT /api/products/:id (Admin Only)
 router.put('/:id', requireAuth, requireAdmin, async (req: Request, res: Response) => {
   try {
     const { name, description, price, category, image, stock, sku, status, brand, features } = req.body;
+    if (stock !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message: 'Stock can only be changed through the verified inventory management endpoint.',
+      });
+    }
     const updates: Record<string, unknown> = {};
 
     if (name !== undefined) {
@@ -218,7 +264,6 @@ router.put('/:id', requireAuth, requireAdmin, async (req: Request, res: Response
       updates.category = category.trim();
     }
     if (image !== undefined) updates.image = image;
-    if (stock !== undefined) updates.stock = Number(stock);
     if (sku !== undefined) {
       if (typeof sku !== 'string' || !sku.trim()) {
         return res.status(400).json({ success: false, message: 'Product SKU must be a non-empty string.' });
@@ -245,9 +290,6 @@ router.put('/:id', requireAuth, requireAdmin, async (req: Request, res: Response
     }
     if (updates.price !== undefined && (!Number.isFinite(Number(updates.price)) || Number(updates.price) <= 0)) {
       return res.status(400).json({ success: false, message: 'Price must be greater than zero.' });
-    }
-    if (updates.stock !== undefined && (!Number.isInteger(Number(updates.stock)) || Number(updates.stock) < 0)) {
-      return res.status(400).json({ success: false, message: 'Stock must be a non-negative whole number.' });
     }
     if (updates.status !== undefined && !['active', 'inactive'].includes(String(updates.status))) {
       return res.status(400).json({ success: false, message: 'Product status must be active or inactive.' });

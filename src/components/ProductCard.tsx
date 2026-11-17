@@ -3,7 +3,12 @@ import { Heart, ShoppingBag, Star, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
-import { formatCategoryLabel, hasSimulatedOlistInventory } from '../utils/productPresentation';
+import {
+  formatCategoryLabel,
+  hasSimulatedOlistInventory,
+  isEstimatedOlistPrice,
+  isInventoryVerified,
+} from '../utils/productPresentation';
 import { ProductImage } from './ProductImage';
 
 interface ProductCardProps {
@@ -15,10 +20,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
   const { addToCart } = useCart();
   const { isWishlisted, toggleWishlist } = useWishlist();
   const [justAdded, setJustAdded] = useState(false);
+  const canPurchase = isInventoryVerified(product.inventoryStatus) && product.stock > 0;
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (product.stock > 0) {
+    if (canPurchase) {
       addToCart(product, 1);
       setJustAdded(true);
       setTimeout(() => setJustAdded(false), 1400);
@@ -55,14 +61,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
         </button>
 
         {/* Stock status indicator (unboxed subtle text) */}
-        {product.stock <= 5 && product.stock > 0 && (
+        {canPurchase && product.stock <= 5 && (
           <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-amber-700 text-[11px] font-semibold px-2 py-0.5 rounded shadow-xs">
             Only {product.stock} left
           </div>
         )}
-        {product.stock === 0 && (
+        {!canPurchase && (
           <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-rose-700 text-[11px] font-semibold px-2 py-0.5 rounded shadow-xs">
-            Out of Stock
+            {isInventoryVerified(product.inventoryStatus) ? 'Out of Stock' : 'Inventory Not Verified'}
           </div>
         )}
       </div>
@@ -90,9 +96,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
           <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
             {product.description}
           </p>
-          {hasSimulatedOlistInventory(product.inventoryMode) && (
+          {!isInventoryVerified(product.inventoryStatus) && (
             <p className="mt-2 text-[10px] font-medium text-amber-700">
-              Simulated stock; not Olist inventory
+              {hasSimulatedOlistInventory(product.inventoryMode, product.inventoryStatus)
+                ? 'Demo quantity; not verified or sourced from Olist'
+                : 'Inventory quantity has not been physically verified'}
             </p>
           )}
         </div>
@@ -103,6 +111,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
             <span className="text-base font-bold text-slate-900 font-mono tabular-nums">
               ₹{product.price.toLocaleString('en-IN')}
             </span>
+            {isEstimatedOlistPrice(product.sku) && (
+              <p className="text-[10px] text-amber-700">Historical price estimate</p>
+            )}
             <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
               {product.numReviews > 0 ? (
                 <>
@@ -116,9 +127,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
 
           <button
             onClick={handleAddToCart}
-            disabled={product.stock === 0}
+            disabled={!canPurchase}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-all whitespace-nowrap shrink-0 cursor-pointer ${
-              product.stock === 0
+              !canPurchase
                 ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
                 : justAdded
                 ? 'bg-emerald-600 text-white'
@@ -133,7 +144,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
             ) : (
               <>
                 <ShoppingBag className="w-3.5 h-3.5" />
-                <span>Add</span>
+                <span>{canPurchase ? 'Add' : 'Unavailable'}</span>
               </>
             )}
           </button>

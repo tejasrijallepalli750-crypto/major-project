@@ -1,8 +1,9 @@
 import { jsPDF } from 'jspdf';
 import { Order } from '../types';
 import { getOrderPaymentSummary } from './orderPaymentSummary';
+import { isEstimatedOlistPrice } from './productPresentation';
 
-export const generateInvoicePDF = (order: Order) => {
+export const createInvoiceDocument = (order: Order) => {
   const paymentSummary = getOrderPaymentSummary(order);
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -11,6 +12,9 @@ export const generateInvoicePDF = (order: Order) => {
   });
 
   const pageWidth = doc.internal.pageSize.getWidth();
+  const footerY = doc.internal.pageSize.getHeight() - 32;
+  const contentBottom = footerY - 20;
+  const containsEstimatedOlistPrices = order.orderItems.some((item) => isEstimatedOlistPrice(item.sku));
   let y = 20;
 
   // Header / Brand
@@ -88,34 +92,52 @@ export const generateInvoicePDF = (order: Order) => {
   doc.setTextColor(badgeColors.text[0], badgeColors.text[1], badgeColors.text[2]);
   doc.text(paymentSummary.statusLabel, pageWidth - 55, y + 24.5, { align: 'center', maxWidth: 48 });
 
-  // Table Header
+  const drawTableHeader = (continued: boolean) => {
+    if (continued) {
+      y = 20;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(15, 23, 42);
+      doc.text('ORDER ITEMS (CONTINUED)', 20, y);
+      y += 7;
+    }
+
+    doc.setFillColor(248, 250, 252);
+    doc.rect(20, y, pageWidth - 40, 8, 'F');
+    doc.setDrawColor(226, 232, 240);
+    doc.line(20, y, pageWidth - 20, y);
+    doc.line(20, y + 8, pageWidth - 20, y + 8);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text('ITEM DESCRIPTION / SKU', 24, y + 5.5);
+    doc.text('QTY', 120, y + 5.5, { align: 'center' });
+    doc.text('UNIT PRICE (INR)', 150, y + 5.5, { align: 'right' });
+    doc.text('AMOUNT (INR)', pageWidth - 24, y + 5.5, { align: 'right' });
+
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(30, 41, 59);
+  };
+
   y += 38;
-  doc.setFillColor(248, 250, 252); // slate-50
-  doc.rect(20, y, pageWidth - 40, 8, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.line(20, y, pageWidth - 20, y);
-  doc.line(20, y + 8, pageWidth - 20, y + 8);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text('ITEM DESCRIPTION / SKU', 24, y + 5.5);
-  doc.text('QTY', 120, y + 5.5, { align: 'center' });
-  doc.text('UNIT PRICE (INR)', 150, y + 5.5, { align: 'right' });
-  doc.text('AMOUNT (INR)', pageWidth - 24, y + 5.5, { align: 'right' });
-
-  // Table Body Rows
-  y += 8;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(30, 41, 59);
+  drawTableHeader(false);
 
   for (const item of order.orderItems) {
+    if (y + 11 > contentBottom) {
+      doc.addPage();
+      drawTableHeader(true);
+    }
+
     y += 7;
     doc.text(item.name.slice(0, 48), 24, y);
     doc.setTextColor(148, 163, 184);
     doc.setFontSize(7.5);
-    const inventoryNote = item.inventoryMode === 'simulated-demo' ? ' | Simulated demo stock' : '';
+    const inventoryNote = item.inventoryMode === 'simulated-demo' && item.inventoryStatus !== 'verified'
+      ? ' | Simulated demo stock'
+      : '';
     doc.text(`SKU: ${item.sku || 'N/A'}${inventoryNote}`.slice(0, 58), 24, y + 4);
 
     doc.setFontSize(8.5);
@@ -131,6 +153,16 @@ export const generateInvoicePDF = (order: Order) => {
   }
 
   // Summary Totals
+  if (y + 40 > contentBottom) {
+    doc.addPage();
+    y = 20;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text('ORDER TOTALS', 20, y);
+    y += 8;
+  }
+
   y += 10;
   const summaryX = pageWidth - 80;
 
@@ -142,16 +174,12 @@ export const generateInvoicePDF = (order: Order) => {
   doc.text(`₹${order.itemsPrice.toLocaleString('en-IN')}`, pageWidth - 24, y, { align: 'right' });
 
   y += 6;
-  doc.text('CGST (9%):', summaryX, y);
-  doc.text(`₹${(order.taxPrice / 2).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
-
-  y += 6;
-  doc.text('SGST (9%):', summaryX, y);
-  doc.text(`₹${(order.taxPrice / 2).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
+  doc.text('GST (18%):', summaryX, y);
+  doc.text(`₹${order.taxPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
 
   y += 6;
   doc.text('Shipping:', summaryX, y);
-  doc.text(order.shippingPrice === 0 ? 'FREE' : `₹${order.shippingPrice}`, pageWidth - 24, y, { align: 'right' });
+  doc.text(order.shippingPrice === 0 ? 'FREE' : `₹${order.shippingPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
 
   y += 4;
   doc.setDrawColor(203, 213, 225);
@@ -164,18 +192,26 @@ export const generateInvoicePDF = (order: Order) => {
   doc.text('TOTAL AMOUNT:', summaryX, y);
   doc.text(`₹${order.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, pageWidth - 24, y, { align: 'right' });
 
-  // Footer / Compliance Note
-  y = 265;
-  doc.setDrawColor(226, 232, 240);
-  doc.line(20, y, pageWidth - 20, y);
+  for (let page = 1; page <= doc.getNumberOfPages(); page += 1) {
+    doc.setPage(page);
+    doc.setDrawColor(226, 232, 240);
+    doc.line(20, footerY, pageWidth - 20, footerY);
 
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(148, 163, 184);
-  doc.text('Computer-generated order invoice. Not a tax invoice.', 20, y + 6);
-  doc.text(`Payment status: ${paymentSummary.statusLabel}.`, 20, y + 11);
-  doc.text('Thank you for shopping with AURA Retail.', pageWidth - 20, y + 6, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Computer-generated order invoice. Not a tax invoice.', 20, footerY + 6);
+    doc.text(`Payment status: ${paymentSummary.statusLabel}.`, 20, footerY + 11);
+    if (containsEstimatedOlistPrices) {
+      doc.text('Olist catalogue prices are historical estimates, not current prices.', 20, footerY + 16);
+    }
+    doc.text('Thank you for shopping with AURA Retail.', pageWidth - 20, footerY + 6, { align: 'right' });
+  }
 
-  // Save the PDF
+  return doc;
+};
+
+export const generateInvoicePDF = (order: Order) => {
+  const doc = createInvoiceDocument(order);
   doc.save(`Invoice_${order.orderNumber}.pdf`);
 };

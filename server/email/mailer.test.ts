@@ -77,7 +77,9 @@ test('sends an escaped HTML order confirmation through the configured transport'
   };
 
   try {
-    await sendOrderConfirmation(createTestOrder(), 'customer@example.invalid', transport);
+    const order = createTestOrder();
+    order.orderItems[0].sku = 'OLIST-00000000000000000000000000000000';
+    await sendOrderConfirmation(order, 'customer@example.invalid', transport);
   } finally {
     restoreEnvironment(originalEnvironment);
   }
@@ -91,6 +93,7 @@ test('sends an escaped HTML order confirmation through the configured transport'
   assert.match(html, /Headphones &lt;Premium&gt;/);
   assert.match(html, /Customer &amp; Co/);
   assert.match(html, /INR 246\.00/);
+  assert.match(html, /Historical Olist price estimate/);
   assert.match(html, /1234567890/);
 });
 

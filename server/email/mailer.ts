@@ -38,7 +38,7 @@ const formatInr = (amount: number): string => `INR ${amount.toFixed(2)}`;
 const renderOrderConfirmation = (order: Order): string => {
   const itemRows = order.orderItems.map((item) => `
     <tr>
-      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escapeHtml(item.name)}</td>
+      <td style="padding:8px;border-bottom:1px solid #e5e7eb">${escapeHtml(item.name)}${/^OLIST-/i.test(item.sku) ? '<br><small>Historical Olist price estimate</small>' : ''}</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:center">${item.quantity}</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${formatInr(item.price)}</td>
       <td style="padding:8px;border-bottom:1px solid #e5e7eb;text-align:right">${formatInr(item.price * item.quantity)}</td>

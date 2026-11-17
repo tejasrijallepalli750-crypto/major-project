@@ -24,6 +24,7 @@ interface ImportCounts {
   rows: number;
   imported: number;
   wouldImport: number;
+  estimatedBsonBytes: number;
   alreadyPresent: number;
   duplicateRows: number;
   invalid: number;
@@ -335,6 +336,25 @@ const addError = (counts: ImportCounts, row: number, message: string): void => {
   if (counts.errors.length < ERROR_SAMPLE_LIMIT) counts.errors.push({ row, message });
 };
 
+const estimateStoredRecordBytes = (key: string, record: Record<string, unknown>): number =>
+  mongoose.mongo.BSON.calculateObjectSize({
+    _id: key,
+    ...record,
+    source: 'olist',
+    importedAt: new Date(0),
+  });
+
+const sourceFileReport = () => files.map((file) => ({
+  filename: file.filename,
+  sizeBytes: fs.statSync(path.join(DATA_DIRECTORY, file.filename)).size,
+}));
+
+const storageEstimate = (estimatedBsonBytes: number) => ({
+  estimatedDocumentBsonBytes: estimatedBsonBytes,
+  planningAllowanceBytes: estimatedBsonBytes * 2,
+  note: 'The 2x planning allowance is not a MongoDB guarantee; it allows room for indexes and storage overhead. Confirm Atlas free space and backup before importing.',
+});
+
 async function verifyFiles(): Promise<void> {
   const problems: string[] = [];
   for (const file of files) {
@@ -385,6 +405,7 @@ async function importFile(file: FileSpec, state: ImportState): Promise<ImportCou
     rows: 0,
     imported: 0,
     wouldImport: 0,
+    estimatedBsonBytes: 0,
     alreadyPresent: 0,
     duplicateRows: 0,
     invalid: 0,
@@ -458,6 +479,7 @@ async function importFile(file: FileSpec, state: ImportState): Promise<ImportCou
         seenInRun.add(key);
         seenRecords.set(key, JSON.stringify(record));
         pending.set(key, record);
+        counts.estimatedBsonBytes += estimateStoredRecordBytes(key, record);
         if (categoryWasUntranslated && counts.untranslatedCategories !== undefined) {
           counts.untranslatedCategories += 1;
         }
@@ -496,6 +518,7 @@ const summarize = (results: Partial<Record<OlistHistoryTable, ImportCounts>>) =>
     rows: totals.rows + item.rows,
     imported: totals.imported + item.imported,
     wouldImport: totals.wouldImport + item.wouldImport,
+    estimatedBsonBytes: totals.estimatedBsonBytes + item.estimatedBsonBytes,
     alreadyPresent: totals.alreadyPresent + item.alreadyPresent,
     duplicateRows: totals.duplicateRows + item.duplicateRows,
     invalid: totals.invalid + item.invalid,
@@ -505,6 +528,7 @@ const summarize = (results: Partial<Record<OlistHistoryTable, ImportCounts>>) =>
     rows: 0,
     imported: 0,
     wouldImport: 0,
+    estimatedBsonBytes: 0,
     alreadyPresent: 0,
     duplicateRows: 0,
     invalid: 0,
@@ -572,10 +596,12 @@ async function main(): Promise<void> {
         status: 'failed',
         mode: 'MongoDB historical collections',
         sourceDirectory: path.relative(process.cwd(), DATA_DIRECTORY),
+        sourceFiles: sourceFileReport(),
         finishedAt: new Date().toISOString(),
         database: 'connection lost or write failed',
         tables: results,
         totals: summarize(results),
+        storageEstimate: storageEstimate(summarize(results).estimatedBsonBytes),
       };
       console.log(JSON.stringify(report, null, 2));
       console.log(`Partial import report saved to ${saveReport(report)}`);
@@ -586,16 +612,16 @@ async function main(): Promise<void> {
     status: 'completed',
     mode: dryRun ? 'dry-run (no database writes)' : 'MongoDB historical collections',
     sourceDirectory: path.relative(process.cwd(), DATA_DIRECTORY),
+    sourceFiles: sourceFileReport(),
     finishedAt: new Date().toISOString(),
     database: dryRun ? 'not contacted' : 'MongoDB ping succeeded',
     tables: results,
     totals: summarize(results),
+    storageEstimate: storageEstimate(summarize(results).estimatedBsonBytes),
   };
 
   console.log(JSON.stringify(report, null, 2));
-  if (!dryRun) {
-    console.log(`Import report saved to ${saveReport(report)}`);
-  }
+  console.log(`Import report saved to ${saveReport(report)}`);
   if (report.totals.invalid > 0) process.exitCode = 1;
 }
 

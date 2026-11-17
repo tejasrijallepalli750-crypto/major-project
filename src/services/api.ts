@@ -98,7 +98,7 @@ export const api = {
   },
 
   // --- Products Endpoints ---
-  async getProducts(params?: { search?: string; category?: string; sort?: string; page?: number; limit?: number; includeInactive?: boolean }): Promise<{ success: boolean; data: Product[]; total: number; totalPages: number }> {
+  async getProducts(params?: { search?: string; category?: string; sort?: string; page?: number; limit?: number; includeInactive?: boolean }): Promise<{ success: boolean; data: Product[]; total: number; page: number; totalPages: number }> {
     const query = new URLSearchParams();
     if (params?.search) query.append('search', params.search);
     if (params?.category) query.append('category', params.category);
@@ -170,6 +170,20 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to update product');
+    return data;
+  },
+
+  async updateProductInventory(
+    id: string,
+    inventory: { stock: number; confirmPhysicalCount: true },
+  ): Promise<{ success: boolean; data: Product; message: string }> {
+    const res = await fetch(`${BASE_URL}/products/${encodeURIComponent(id)}/inventory`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(inventory),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to save verified inventory');
     return data;
   },
 

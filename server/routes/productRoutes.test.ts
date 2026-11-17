@@ -140,3 +140,177 @@ test('product reviews are public and restricted to eligible verified purchasers'
     else process.env.JWT_SECRET = originalSecret;
   }
 });
+
+test('only admins can record a physically confirmed inventory quantity', async () => {
+  const originalSecret = process.env.JWT_SECRET;
+  const originalFindUserById = db.findUserById;
+  const originalUpdateProductInventory = db.updateProductInventory;
+  const admin: User = {
+    id: 'usr-inventory-admin-test',
+    name: 'Inventory Admin',
+    email: 'inventory-admin@example.invalid',
+    role: 'admin',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+  const customer: User = { ...admin, id: 'usr-inventory-customer-test', role: 'customer' };
+  const product: Product = {
+    id: 'prod-inventory-route-test',
+    name: 'Inventory Test Product',
+    description: 'Test product',
+    price: 100,
+    category: 'Test',
+    image: '/images/products/test.jpg',
+    stock: 0,
+    sku: 'INVENTORY-TEST',
+    status: 'active',
+    inventoryStatus: 'unverified',
+    rating: 0,
+    numReviews: 0,
+    brand: 'AURA',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+  let updateCalls = 0;
+  process.env.JWT_SECRET = 'inventory-route-test-secret-that-is-at-least-32-characters';
+  db.findUserById = async (id) => id === admin.id ? admin : id === customer.id ? customer : undefined;
+  db.updateProductInventory = async (id, stock, verifiedBy) => {
+    updateCalls += 1;
+    assert.equal(id, product.id);
+    assert.equal(verifiedBy, admin.id);
+    return { ...product, stock, inventoryStatus: 'verified', inventoryVerifiedAt: new Date(0).toISOString() };
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/products', productRoutes);
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}/api/products/${product.id}/inventory`;
+    const adminToken = generateToken(admin);
+    const customerToken = generateToken(customer);
+    const send = (body: unknown, token: string) => fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+
+    assert.equal((await send({ stock: 3, confirmPhysicalCount: true }, customerToken)).status, 403);
+    assert.equal((await send({ stock: 3 }, adminToken)).status, 400);
+    assert.equal(updateCalls, 0);
+
+    const saved = await send({ stock: 3, confirmPhysicalCount: true }, adminToken);
+    assert.equal(saved.status, 200);
+    const result = await saved.json() as { data: Product };
+    assert.equal(result.data.stock, 3);
+    assert.equal(result.data.inventoryStatus, 'verified');
+    assert.equal(updateCalls, 1);
+  } finally {
+    server.close();
+    await once(server, 'close');
+    db.findUserById = originalFindUserById;
+    db.updateProductInventory = originalUpdateProductInventory;
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
+  }
+});
+
+test('new products require admin access and stay unverified until inventory is counted', async () => {
+  const originalSecret = process.env.JWT_SECRET;
+  const originalFindUserById = db.findUserById;
+  const originalCreateProduct = db.createProduct;
+  const originalUpdateProduct = db.updateProduct;
+  const admin: User = {
+    id: 'usr-product-create-admin-test',
+    name: 'Product Admin',
+    email: 'product-admin@example.invalid',
+    role: 'admin',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+  const customer: User = { ...admin, id: 'usr-product-create-customer-test', role: 'customer' };
+  const createdProducts: Product[] = [];
+  let updateCalls = 0;
+
+  process.env.JWT_SECRET = 'product-create-test-secret-that-is-at-least-32-characters';
+  db.findUserById = async (id) => id === admin.id ? admin : id === customer.id ? customer : undefined;
+  db.createProduct = async (data) => {
+    const createdProduct: Product = {
+      ...data,
+      id: 'prod-product-create-test',
+      createdAt: new Date(0).toISOString(),
+      updatedAt: new Date(0).toISOString(),
+    };
+    createdProducts.push(createdProduct);
+    return createdProduct;
+  };
+  db.updateProduct = async () => {
+    updateCalls += 1;
+    return undefined;
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/products', productRoutes);
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}/api/products`;
+    const payload = {
+      name: 'New Test Product',
+      description: 'A new product for the route test.',
+      price: 99,
+      category: 'Test',
+      image: '/images/catalog-category-art/technology.svg',
+      stock: 0,
+      sku: 'NEW-TEST-PRODUCT',
+      status: 'active',
+    };
+    const send = (method: string, body: unknown, token?: string) => fetch(
+      method === 'POST' ? url : `${url}/prod-product-create-test`,
+      {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    assert.equal((await send('POST', payload)).status, 401);
+    assert.equal((await send('POST', payload, generateToken(customer))).status, 403);
+    const adminToken = generateToken(admin);
+
+    const nonzeroStock = await send('POST', { ...payload, stock: 5 }, adminToken);
+    assert.equal(nonzeroStock.status, 400);
+    assert.equal(createdProducts.length, 0);
+
+    const created = await send('POST', payload, adminToken);
+    assert.equal(created.status, 201);
+    const savedProduct = createdProducts[0];
+    assert.ok(savedProduct);
+    assert.equal(savedProduct.stock, 0);
+    assert.equal(savedProduct.inventoryStatus, 'unverified');
+    assert.equal((await created.json() as { data: Product }).data.inventoryStatus, 'unverified');
+
+    const stockBypass = await send('PUT', { stock: 5 }, adminToken);
+    assert.equal(stockBypass.status, 400);
+    assert.equal(updateCalls, 0);
+  } finally {
+    server.close();
+    await once(server, 'close');
+    db.findUserById = originalFindUserById;
+    db.createProduct = originalCreateProduct;
+    db.updateProduct = originalUpdateProduct;
+    if (originalSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = originalSecret;
+  }
+});

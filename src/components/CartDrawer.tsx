@@ -2,7 +2,7 @@ import React from 'react';
 import { X, Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { ProductImage } from './ProductImage';
-import { hasSimulatedOlistInventory } from '../utils/productPresentation';
+import { hasSimulatedOlistInventory, isEstimatedOlistPrice, isInventoryVerified } from '../utils/productPresentation';
 
 interface CartDrawerProps {
   onCheckout: () => void;
@@ -21,6 +21,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
     taxPrice,
     totalPrice,
   } = useCart();
+  const canCheckout = cart.every((item) =>
+    isInventoryVerified(item.inventoryStatus) && item.stock >= item.quantity);
 
   if (!isCartDrawerOpen) return null;
 
@@ -94,10 +96,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      {hasSimulatedOlistInventory(item.inventoryMode) && (
+                      {hasSimulatedOlistInventory(item.inventoryMode, item.inventoryStatus) && (
                         <p className="mt-1 text-[10px] font-medium text-amber-700">
-                          Simulated inventory; not from Olist
+                          Demo quantity; not verified or sourced from Olist
                         </p>
+                      )}
+                      {!isInventoryVerified(item.inventoryStatus) && (
+                        <p className="mt-1 text-[10px] font-medium text-rose-700">Inventory not verified</p>
+                      )}
+                      {isEstimatedOlistPrice(item.sku) && (
+                        <p className="mt-1 text-[10px] text-amber-700">Historical price estimate</p>
                       )}
                     </div>
 
@@ -113,7 +121,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
                         <span className="px-2 text-xs font-semibold font-mono tabular-nums">{item.quantity}</span>
                         <button
                           onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                          disabled={item.quantity >= item.stock}
+                          disabled={!isInventoryVerified(item.inventoryStatus) || item.quantity >= item.stock}
                           className="p-1 text-slate-500 hover:text-slate-900 disabled:opacity-30 cursor-pointer"
                         >
                           <Plus className="w-3 h-3" />
@@ -159,9 +167,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
                   setIsCartDrawerOpen(false);
                   onCheckout();
                 }}
-                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                disabled={!canCheckout}
+                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <span>Proceed to Checkout</span>
+                <span>{canCheckout ? 'Proceed to Checkout' : 'Inventory verification required'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>

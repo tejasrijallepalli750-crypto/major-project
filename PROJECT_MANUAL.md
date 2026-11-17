@@ -4,9 +4,39 @@ AURA is a React storefront backed by an Express API and MongoDB Atlas through Mo
 
 ## Requirements
 
-- Node.js 20 or later and npm
+- Node.js 20.19+ or 22.12+ and npm. Render is pinned to Node 24.22.1 in `.node-version`.
 - A MongoDB Atlas database and database user
 - A private JWT signing secret
+
+## Academic submission readiness audit
+
+This audit distinguishes code-level checks from integrations that were not exercised. It does not claim that deployment, email delivery, a Razorpay transaction, or an Olist history import succeeded.
+
+### Implemented and locally verified
+
+- React/Vite storefront, Express API, MongoDB-backed users/products/carts/wishlists/orders, password hashing, JWT authentication, and admin-only endpoints.
+- Product reviews require a paid or delivered order containing the product; product rating totals are recalculated when a review is created.
+- Server-side price checks, transactional stock reservation, checkout idempotency, Razorpay signature and provider-status checks, signed payment-specific webhooks, and invoice PDF generation.
+- Optional SMTP order email, Helmet/CSP, CORS allowlisting, API rate limits, Zod request-body validation, Render configuration, and production build settings.
+- Tests and builds are local only. See the final verification commands below.
+
+### Partial, not externally verified, or still incomplete
+
+- Read-only Atlas inspection found 32,951 active Olist catalog products and 27 inactive curated products (32,978 total). Seven of eight existing AURA orders reference non-Olist SKUs, so the inactive products and all order snapshots must be retained. No catalog rewrite or database update was made.
+- The Olist products have indicative prices derived from historical BRL order-item averages, generated display titles, and no source-provided inventory. They are marked as estimates in customer and order views. All existing stock values without a physical verification marker are now treated as unverified and cannot be purchased. The admin product search can page through the full catalog and record a physical available-to-sell count. There is no bulk verification or stock migration.
+- The inventory metadata is additive and backward-compatible: missing `inventoryStatus` means `unverified`; no Atlas migration is required. The current verification metadata stores the latest verifier and timestamp, not a full adjustment ledger. Pending Razorpay orders can retain reserved stock while payment is retried; automatic expiry/reconciliation is not implemented.
+- Olist historical records are not imported. The nine source CSVs are present and validated by a no-database dry run; see the report and approval gate below.
+- Olist has no original product photographs. Approved local Pexels assets are category representatives; remaining categories use local illustrations. The 27 curated seed-image records have not all been supplied with individually verified creator/source/license metadata, so those records are not fully provenance-documented.
+- Atlas connectivity and metadata were checked read-only; application CRUD, rollback, SMTP delivery, Razorpay Test Mode transactions/webhook delivery, Render health, and deployed behavior have not been tested end-to-end.
+- Order cancellation/refund reconciliation for Razorpay is intentionally conservative: paid orders require refund verification, and orders with an active Razorpay order ID require payment-state reconciliation before cancellation. A customer-facing cancellation endpoint and automatic stale-order release are not implemented.
+
+### Required remaining actions
+
+1. Physically count and record available-to-sell stock before enabling sales for any product. A demo or imported quantity is not evidence of physical stock.
+2. Do not run the Olist history importer against Atlas until the owner reviews the storage/backup plan below and explicitly approves the write.
+3. Complete per-image attribution metadata for the curated images if they are retained or redistributed; do not describe category images as exact Olist product photos.
+4. With permission, run a Razorpay Test Mode transaction and verify the configured payment-specific webhooks on a reachable test endpoint. Do not use live credentials.
+5. Capture original screenshots of the catalog, product/reviews, verified and unverified inventory states, order history, and invoice for the academic report. No screenshots or live user data were generated for this audit.
 
 ## Configure MongoDB Atlas and start the app
 
@@ -27,7 +57,7 @@ AURA is a React storefront backed by an Express API and MongoDB Atlas through Mo
    npm run dev
    ```
 
-   The legacy-peer option is needed for the repository's existing Vite/esbuild peer-version mismatch. MongoDB connection failures are logged; the storefront remains available, but database APIs return HTTP 503 until MongoDB connects.
+   The legacy-peer option is needed for the repository's existing Vite/esbuild peer-version mismatch. MongoDB connection failures are logged; the storefront remains available, but database APIs return HTTP 503 until MongoDB connects. On an existing Atlas database, review the startup seed/deactivation behavior before launching a local server; use the existing deployed service for read-only health checks rather than starting an unreviewed local instance.
 7. Verify the real connection:
 
    ```powershell
@@ -64,7 +94,19 @@ Migration is explicit; the server never imports the JSON file automatically.
 
 ## Import Olist historical data
 
-The extracted source files belong in `dataset/olist_raw/`. Use only the nine original Olist files described in [dataset/README.md](dataset/README.md); prepared catalog files and sample CSVs are not part of this import. The importer keeps these records in dedicated `aura_olist_history_*` collections, separate from live customers, products, carts, wishlists, orders, and Razorpay payments. It uses insert-only upserts, so repeating the command skips records already imported instead of replacing them.
+The source is the [Brazilian E-Commerce Public Dataset by Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce). The nine original CSVs belong in `dataset/olist_raw/` and are present in this checkout:
+
+- `olist_customers_dataset.csv`
+- `olist_geolocation_dataset.csv`
+- `olist_order_items_dataset.csv`
+- `olist_order_payments_dataset.csv`
+- `olist_order_reviews_dataset.csv`
+- `olist_orders_dataset.csv`
+- `olist_products_dataset.csv`
+- `olist_sellers_dataset.csv`
+- `product_category_name_translation.csv`
+
+The importer preserves the source IDs and relationships in nine dedicated `aura_olist_history_*` collections, separate from live AURA customers, products, carts, wishlists, orders, and Razorpay payments. It uses insert-only upserts and tags records with `source: "olist"`; existing documents are not replaced.
 
 Open PowerShell in the project root and first check the files without requiring MongoDB:
 
@@ -72,26 +114,21 @@ Open PowerShell in the project root and first check the files without requiring 
 npm run import:olist-history -- --dry-run
 ```
 
-The report lists source rows, rows that would be imported, duplicate keys, invalid rows, and relationship errors for each data type. Dry-run mode does not contact MongoDB or write records. Resolve missing files or invalid rows before proceeding. To import, privately configure `MONGODB_URI` in `.env`, start the app, and confirm MongoDB is really connected:
+The dry run completed without contacting MongoDB or writing records. It validated 1,550,922 CSV rows, found 1,289,091 valid unique records eligible to insert, deduplicated 261,831 repeated geolocation rows, and found zero invalid rows or relationship errors. Thirteen product categories have no translation in the source translation file; their original category values remain preserved.
 
-```powershell
-npm run dev
-```
+The nine CSVs occupy 126,186,995 bytes (120.34 MiB). The dry-run BSON size estimate for the 1,289,091 candidate documents is 387,978,280 bytes (about 370.0 MiB), excluding secondary indexes and operational overhead. Use 775,956,560 bytes (about 740.0 MiB) only as a conservative 2x planning allowance, not a guarantee of Atlas storage consumption. Confirm available Atlas capacity and take a recoverable Atlas snapshot before any import.
 
-In a second PowerShell window, from the project root:
+The collections are `aura_olist_history_category_translations`, `aura_olist_history_customers`, `aura_olist_history_sellers`, `aura_olist_history_products`, `aura_olist_history_orders`, `aura_olist_history_order_items`, `aura_olist_history_payments`, `aura_olist_history_reviews`, and `aura_olist_history_geolocation`. MongoDB's `_id` index is automatic; the importer also creates relationship/category indexes. Olist payment values are historical BRL source values, never AURA or Razorpay transactions.
 
-```powershell
-Invoke-RestMethod http://localhost:3000/api/health
-npm run import:olist-history
-```
+**Import has not been run. Do not execute the write command without the owner's explicit approval.** The current Atlas inspection found no `aura_olist_history_*` collections. After approval, first record a backup/snapshot and pre-import counts, then run `npm run import:olist-history` with a private, confirmed Atlas connection. The importer writes insert-only records and produces a timestamped report under the ignored `data/olist-import-reports/` folder. If rollback is approved later, use a separately reviewed, collection-scoped deletion of documents tagged `source: "olist"` in only these nine history collections, compare deleted counts with the import report, and never drop the database or touch live AURA collections. No rollback has been executed or staged.
 
-The database import runs only after the central MongoDB connection completes a successful ping. It will not fall back to the legacy JSON file. A timestamped, PII-minimized report is saved in the ignored `data/olist-import-reports/` folder. Olist payment rows are historical source records and are never considered actual AURA/Razorpay transactions.
+Dry-run mode is safe to repeat, reports source file sizes and estimated BSON document sizes, and saves a PII-minimized JSON report under `data/olist-import-reports/`. Existing Atlas counts cannot be inferred by dry run because it deliberately does not connect to MongoDB.
 
 ## Product catalog and images
 
-The default sellable catalog is defined in `server/catalog/catalogSeed.ts`. Each SKU maps to one distinct local image in `public/images/products/`; prices are explicit INR store prices, not historical-price estimates. Product cards, details, cart, checkout, and orders use the product price returned by the backend. Product creation requires an existing local image and both SKU and image paths are unique in MongoDB.
+`server/catalog/catalogSeed.ts` contains 27 curated starter products. In the read-only Atlas snapshot, all 27 are inactive and the active sellable catalog consists of 32,951 Olist SKUs. The curated records remain stored because existing AURA order items reference them; do not delete or rewrite those products or historical orders. Olist display names are generated because the source has no product names. Olist INR prices are historical BRL order-item averages multiplied by the documented conversion rate, not current or original source prices. Product cards, details, cart, checkout, order views, email, and invoices label Olist prices as estimates.
 
-The selected product photographs are already bundled locally in the project and identified in `public/photo-review.html`. They are Pexels-sourced assets; review the [Pexels license](https://www.pexels.com/license/) before redistribution or deployment. No customer-facing product image relies on an external URL.
+Olist source products contain no original product photographs or image URLs. Customer views use the centralized local category-photo/illustration mapping, with a fallback if an asset fails to load; the UI labels images as category representatives, not original Olist product photos. Approved Pexels category-photo source, creator, license, attribution, and hash metadata are in the category map. The curated seed image review is in `public/photo-review.html`; individual creator/source/license metadata for every curated image is not yet complete. Review the [Pexels license](https://www.pexels.com/license/) before redistribution or deployment.
 
 Run the image check while the app is running:
 
@@ -101,7 +138,7 @@ npm run catalog:audit-images
 
 When the live database is available, it audits every product returned by the API. If it is unavailable, the command checks the curated seed mapping and local image endpoints instead; that fallback does not prove that MongoDB contains the catalog.
 
-Administrators can import catalog CSV/JSON files from the protected administration area. Each sellable row must provide a meaningful name, category, positive store price, non-negative integer stock, unique SKU, and an existing local `/images/...` path. Historical records without these attributes are not made into live product listings.
+Administrators can import catalog CSV/JSON files from the protected administration area. A row's supplied stock value is unverified and is never sellable by itself. New products start at zero stock; an administrator must use the separate inventory workflow to enter a physically counted available-to-sell quantity. Prices and stock are validated by the backend. Product images must resolve to a local `/images/...` asset.
 
 ### Import the Olist product catalog
 
@@ -164,14 +201,16 @@ npm run reconcile:olist-catalogue -- --apply --delete-unreferenced
 
 Products referenced by any order item, saved cart, or wishlist are kept as inactive records. Products in the built-in starter seed are also retained inactive when deletion is enabled, so a later server start cannot recreate them. Payment results are embedded in order records, and invoice rows are generated from the order snapshots; neither is deleted or rewritten. The script updates products only. Keep the backend stopped during permanent deletion to prevent concurrent cart changes.
 
-Olist has no current inventory quantities. Demo inventory is disabled unless explicitly enabled. When enabled, the reconciliation command initializes only marked Olist products with zero stock to 20 simulated units by default; `--demo-stock <quantity>` configures the initial quantity. Existing non-zero stock and already initialized simulated stock are preserved, so rerunning reconciliation does not replenish units sold:
+The reconciliation `--apply` and `--delete-unreferenced` options write to or delete Atlas data and require explicit owner approval after reviewing a dry-run report. Neither option was run during this audit. Preserve the 27 inactive curated product documents because existing AURA orders reference them.
+
+Olist has no current inventory quantities. Optional demo inventory is explicitly simulated, and it is never available to purchase. The reconciliation command initializes only marked Olist products with zero stock to 20 simulated units by default; `--demo-stock <quantity>` configures the displayed demo quantity. Existing non-zero stock and already initialized simulated stock are preserved, so rerunning reconciliation does not replenish units sold:
 
 ```powershell
 npm run reconcile:olist-catalogue -- --enable-demo-inventory
 npm run reconcile:olist-catalogue -- --enable-demo-inventory --demo-stock 7
 ```
 
-These commands are dry runs; apply the inventory initialization only after reviewing the result and passing `--apply`. Simulated quantities are explicitly labeled in the storefront, cart, checkout, and order views, and are not represented as Olist data. Order creation continues to perform server-side availability checks and an atomic stock decrement.
+These commands are dry runs; apply the inventory initialization only after reviewing the result and receiving explicit approval. Demo quantities are labeled, treated as unverified, and cannot pass cart/order validation or the atomic stock-allocation predicate. Do not use simulated quantities for a real sale.
 
 ```powershell
 npm run reconcile:olist-catalogue -- --apply --enable-demo-inventory
@@ -226,7 +265,7 @@ This sample is static and read-only. It does not connect to MongoDB and is not c
 
 ## Payment setup
 
-Razorpay checkout is disabled until valid Test Mode credentials are set in the server-only `.env` file:
+Razorpay checkout is disabled until valid Test Mode credentials are set in the server-only `.env` file. For a safe test transaction and webhook setup, follow the [Razorpay Test Mode manual guide](./RAZORPAY_TEST_MODE_GUIDE.md).
 
 ```env
 RAZORPAY_KEY_ID=rzp_test_your_key_id
@@ -234,7 +273,7 @@ RAZORPAY_KEY_SECRET=your_test_key_secret
 RAZORPAY_WEBHOOK_SECRET=optional_webhook_secret
 ```
 
-Use only credentials from Razorpay Dashboard **Test Mode**. The server rejects live key IDs; the test key ID is public to the checkout page, but the key secret and webhook secret must remain in the server-only `.env`. The backend calculates the order amount from its MongoDB order, reuses an associated Razorpay order on retries, verifies Checkout signatures against the stored Razorpay order ID, and fetches the payment from Razorpay before marking an order paid. Only a matching captured INR payment settles the order; authorized, failed, and pending states remain unpaid. Signed `payment.authorized`, `payment.failed`, and `payment.captured`/`order.paid` webhooks are handled from the raw request body. No real Razorpay payment is simulated.
+Use only credentials from Razorpay Dashboard **Test Mode**. The server rejects live key IDs; the test key ID is public to the checkout page, but the key secret and webhook secret must remain in the server-only `.env`. The backend calculates the order amount from its MongoDB order, reuses an associated Razorpay order on retries, verifies Checkout signatures against the stored Razorpay order ID, and fetches the payment from Razorpay before marking an order paid. Only a matching captured INR payment settles the order; authorized, failed, and pending states remain unpaid. Signed `payment.authorized`, `payment.failed`, and `payment.captured` webhooks are handled from the raw request body. `order.paid` is not handled; configure the payment-specific events instead. No end-to-end Razorpay Test Mode transaction was performed during this audit.
 
 To configure Test Mode, enter the values privately in `.env` and restart the backend. Do not paste credentials into chat, source code, or frontend files. A configured key pair enables checkout but does not prove end-to-end connectivity; a sandbox payment still needs to be completed. A webhook also requires a reachable HTTPS endpoint registered in the Razorpay Test Mode Dashboard and its separate webhook secret.
 
@@ -254,14 +293,14 @@ Set these values privately in the server `.env` and restart the backend. Keep th
 
 ### Local Demo Payment
 
-When the server is not running with `NODE_ENV=production`, checkout offers **Local Demo Payment** independently of Razorpay credentials. It can record simulated success, failure, or cancellation for development and presentations. These outcomes are stored in `demoPaymentAttempts`, separate from Razorpay `paymentResult` records. A demo success explicitly leaves `isPaid` false and is never counted as a collected payment. A demo cancellation marks the order cancelled and restores its reserved inventory in the same MongoDB transaction. Demo payment is disabled in production.
+When the server is not running with `NODE_ENV=production`, the development-only `POST /api/payment/demo/complete` endpoint can record simulated success, failure, or cancellation. The current checkout page does not offer Local Demo Payment as a customer-facing option. These outcomes are stored in `demoPaymentAttempts`, separate from Razorpay `paymentResult` records. A demo success explicitly leaves `isPaid` false and is never counted as a collected payment. A demo cancellation marks the order cancelled and restores its reserved inventory in the same MongoDB transaction. The endpoint is disabled in production.
 
 Checkout submissions use a per-user idempotency key and payload hash. Retrying the same submission returns its existing pending order; reusing the key with different order details is rejected. Cancelled checkout requests require a new key.
 
 ## Deploy to Render with MongoDB Atlas
 
 1. Push the project to a Git provider supported by Render. Create a MongoDB Atlas database and a dedicated database user. In Atlas **Network Access**, allow the outbound IP ranges for the Render service; if the selected Render plan does not provide fixed outbound IPs, use an appropriately secured Atlas network policy and a strong, unique database password.
-2. In Render, choose **New + → Blueprint**, select the repository, and deploy the `render.yaml` blueprint. It creates the `aura-store` web service. The configured build command is `npm install --legacy-peer-deps && npm run build`; the start command is `npm start`; and the health check is `/api/health`.
+2. In Render, choose **New + → Blueprint**, select the repository, and deploy the `render.yaml` blueprint. It creates the `aura-store` web service. The configured build command is `npm install --include=dev --legacy-peer-deps && npm run build`; the start command is `npm start`; and the health check is `/api/health`. `tsx` is a production dependency because `npm start` runs the TypeScript server.
 3. In the Render service's **Environment** settings, add the following values. Variables marked `sync: false` in `render.yaml` must be entered in Render and are intentionally not stored in the repository.
 
    | Variable | Value |

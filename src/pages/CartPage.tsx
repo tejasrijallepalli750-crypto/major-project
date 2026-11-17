@@ -3,7 +3,11 @@ import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, ShieldCheck } from 'lucid
 import { useCart } from '../context/CartContext';
 import { ProductImage } from '../components/ProductImage';
 import { BackButton } from '../components/BackButton';
-import { hasSimulatedOlistInventory } from '../utils/productPresentation';
+import {
+  hasSimulatedOlistInventory,
+  isEstimatedOlistPrice,
+  isInventoryVerified,
+} from '../utils/productPresentation';
 
 interface CartPageProps {
   onNavigate: (view: string) => void;
@@ -20,6 +24,8 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
     taxPrice,
     totalPrice,
   } = useCart();
+  const canCheckout = cart.every((item) =>
+    isInventoryVerified(item.inventoryStatus) && item.stock >= item.quantity);
 
   if (cart.length === 0) {
     return (
@@ -92,10 +98,16 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <span className="font-mono tabular-nums">Unit: ₹{item.price.toLocaleString('en-IN')}</span>
                 </div>
-                {hasSimulatedOlistInventory(item.inventoryMode) && (
+                {hasSimulatedOlistInventory(item.inventoryMode, item.inventoryStatus) && (
                   <p className="text-[10px] font-medium text-amber-700">
-                    Simulated demo inventory; not sourced from Olist
+                    Demo quantity; not physically verified or sourced from Olist
                   </p>
+                )}
+                {!isInventoryVerified(item.inventoryStatus) && (
+                  <p className="text-[10px] font-medium text-rose-700">Unavailable until inventory is physically verified</p>
+                )}
+                {isEstimatedOlistPrice(item.sku) && (
+                  <p className="text-[10px] text-amber-700">Historical Olist price estimate, not a current market price</p>
                 )}
 
                 <div className="flex items-center justify-between pt-3">
@@ -109,7 +121,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
                     <span className="px-3 text-xs font-semibold font-mono tabular-nums">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                      disabled={item.quantity >= item.stock}
+                      disabled={!isInventoryVerified(item.inventoryStatus) || item.quantity >= item.stock}
                       className="px-2.5 py-1 text-slate-600 hover:text-slate-900 cursor-pointer font-bold disabled:opacity-30"
                     >
                       <Plus className="w-3 h-3" />
@@ -168,9 +180,10 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
 
           <button
             onClick={() => onNavigate('checkout')}
-            className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+            disabled={!canCheckout}
+            className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span>Proceed to Checkout</span>
+            <span>{canCheckout ? 'Proceed to Checkout' : 'Inventory verification required'}</span>
             <ArrowRight className="w-4 h-4" />
           </button>
 
@@ -179,7 +192,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               <span>Secure checkout</span>
             </div>
-            <p>Prices and stock availability will be re-verified on the server before payment initiation.</p>
+            <p>Only physically verified stock can be purchased. Prices and availability are checked again by the server before payment.</p>
           </div>
         </div>
       </div>

@@ -86,6 +86,10 @@ router.post('/validate-cart', async (req, res: Response) => {
         errors.push(`"${product.name}" is currently unavailable for purchase.`);
         continue;
       }
+      if (product.inventoryStatus !== 'verified') {
+        errors.push(`"${product.name}" is unavailable because its inventory has not been physically verified.`);
+        continue;
+      }
 
       const requestedQty = item.quantity;
       if (product.stock < requestedQty) {
@@ -105,6 +109,7 @@ router.post('/validate-cart', async (req, res: Response) => {
         stock: product.stock,
         sku: product.sku,
         inventoryMode: product.inventoryMode,
+        inventoryStatus: product.inventoryStatus,
       });
     }
 
@@ -194,6 +199,12 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
       if (product.status !== 'active') {
         return res.status(400).json({ success: false, message: `"${product.name}" is not available for purchase.` });
       }
+      if (product.inventoryStatus !== 'verified') {
+        return res.status(409).json({
+          success: false,
+          message: `"${product.name}" cannot be purchased until an administrator physically verifies its inventory.`,
+        });
+      }
 
       const qty = item.quantity;
       if (product.stock < qty) {
@@ -213,6 +224,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
         sku: product.sku,
         category: product.category,
         inventoryMode: product.inventoryMode,
+        inventoryStatus: product.inventoryStatus,
       });
     }
 

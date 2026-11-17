@@ -9,7 +9,7 @@ import { RazorpayModal } from '../components/RazorpayModal';
 import { StateSelectModal } from '../components/StateSelectModal';
 import { BackButton } from '../components/BackButton';
 import { checkoutIdempotency, CheckoutOrderRequest } from '../utils/checkoutIdempotency';
-import { hasSimulatedOlistInventory } from '../utils/productPresentation';
+import { hasSimulatedOlistInventory, isEstimatedOlistPrice, isInventoryVerified } from '../utils/productPresentation';
 
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -198,6 +198,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   };
 
   const handlePaymentSuccess = (verifiedOrder: Order) => handleOrderSuccess(verifiedOrder);
+  const hasUnavailableInventory = cart.some((item) =>
+    !isInventoryVerified(item.inventoryStatus) || item.quantity > item.stock);
 
   const handlePaymentFailure = (msg: string) => {
     setErrorMessage(`Payment error: ${msg}. You can retry the Razorpay checkout.`);
@@ -223,9 +225,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           <div className="flex-1">{errorMessage}</div>
         </div>
       )}
-      {cart.some((item) => hasSimulatedOlistInventory(item.inventoryMode)) && (
+      {cart.some((item) => hasSimulatedOlistInventory(item.inventoryMode, item.inventoryStatus)) && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          This cart includes simulated demo inventory. Quantities are not supplied by Olist and availability is checked again by the server before order creation.
+          This cart includes a simulated quantity that is not physically verified or supplied by Olist.
+        </div>
+      )}
+      {hasUnavailableInventory && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
+          Checkout is unavailable because one or more cart quantities are not physically verified or exceed available stock. Remove those items or return after an administrator verifies inventory.
         </div>
       )}
 
@@ -466,7 +473,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
 
             <button
               type="submit"
-              disabled={isSubmitting || paymentConfigStatus !== 'configured'}
+              disabled={isSubmitting || paymentConfigStatus !== 'configured' || hasUnavailableInventory}
               className="w-full py-4 bg-purple-700 hover:bg-purple-800 text-white font-semibold text-sm rounded-xl flex items-center justify-center gap-2 shadow-sm transition-colors cursor-pointer disabled:opacity-50"
             >
               <Lock className="w-4 h-4" />
@@ -507,6 +514,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                     <span>·</span>
                     <span>₹{item.price.toLocaleString('en-IN')}</span>
                   </div>
+                  {isEstimatedOlistPrice(item.sku) && (
+                    <p className="text-[10px] text-amber-700">Historical Olist price estimate</p>
+                  )}
                 </div>
                 <span className="text-xs font-bold font-mono tabular-nums text-slate-900">
                   ₹{(item.price * item.quantity).toLocaleString('en-IN')}

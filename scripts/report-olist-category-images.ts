@@ -2,12 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isCommerciallyUsableLicense, OlistImageSourceProduct } from './olist-image-enrichment';
+import { OlistImageSourceProduct } from './olist-image-enrichment';
 import { parseOlistCsv } from './olist-product-importer';
 import { OLIST_CATEGORY_IMAGE_MAP } from '../src/data/olistCategoryImageMap';
 import {
   formatCategoryLabel,
   getOlistCategoryImage,
+  isApprovedOlistCategoryPhoto,
   OlistCategoryDefinitionWithPhoto,
 } from '../src/utils/productPresentation';
 
@@ -64,17 +65,7 @@ const validApprovedPhoto = (
   publicRoot: string,
 ): boolean => {
   const photo = definition.approvedPhoto;
-  if (!photo || photo.reviewStatus !== 'approved'
-    || !photo.path.startsWith('/images/olist-category-photos/')
-    || !photo.creator.trim()
-    || !/^https:\/\//i.test(photo.sourceUrl)
-    || !photo.license.trim()
-    || !/^https:\/\//i.test(photo.licenseUrl)
-    || !photo.attribution.trim()
-    || !/^[a-f\d]{64}$/i.test(photo.sha256)
-    || !isCommerciallyUsableLicense(photo.license, photo.licenseUrl)) {
-    return false;
-  }
+  if (!isApprovedOlistCategoryPhoto(photo)) return false;
   const imagePath = path.resolve(publicRoot, `.${photo.path}`);
   if (!imagePath.startsWith(`${path.resolve(publicRoot)}${path.sep}`) || !fs.existsSync(imagePath)) return false;
   const sha256 = crypto.createHash('sha256').update(fs.readFileSync(imagePath)).digest('hex');

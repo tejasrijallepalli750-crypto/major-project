@@ -210,6 +210,7 @@ test('stock decrement stays atomic and rejects quantities above current stock', 
   assert.deepEqual(allocation.filter, {
     id: 'prod-available',
     status: 'active',
+    inventoryStatus: 'verified',
     stock: { $gte: 20 },
   });
   assert.deepEqual(allocation.update, { $inc: { stock: -20 } });

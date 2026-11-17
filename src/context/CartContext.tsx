@@ -3,6 +3,7 @@ import { Product, CartItem } from '../types';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { calculateOrderTotals } from '../utils/orderPricing';
+import { isInventoryVerified } from '../utils/productPresentation';
 
 interface CartContextType {
   cart: CartItem[];
@@ -123,6 +124,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [cart, isAuthLoading, savedCartUserId, user]);
 
   const addToCart = (product: Product, quantity: number = 1) => {
+    if (!isInventoryVerified(product.inventoryStatus) || product.stock < 1) return;
     setCart((prev) => {
       const existing = prev.find((item) => item.productId === product.id);
       if (existing) {
@@ -139,6 +141,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 stock: product.stock,
                 sku: product.sku,
                 inventoryMode: product.inventoryMode,
+                inventoryStatus: product.inventoryStatus,
               }
             : item
         );
@@ -155,6 +158,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             stock: product.stock,
             sku: product.sku,
             inventoryMode: product.inventoryMode,
+            inventoryStatus: product.inventoryStatus,
           },
         ];
       }
@@ -173,6 +177,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCart((prev) =>
       prev.map((item) => {
         if (item.productId === productId) {
+          if (!isInventoryVerified(item.inventoryStatus)) return item;
           const clamped = Math.min(item.stock, quantity);
           return { ...item, quantity: clamped };
         }

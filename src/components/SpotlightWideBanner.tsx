@@ -1,7 +1,7 @@
 import React from 'react';
 import { ArrowRight, PackageCheck } from 'lucide-react';
 import { Product } from '../types';
-import { formatCategoryLabel } from '../utils/productPresentation';
+import { formatCategoryLabel, isEstimatedOlistPrice, isInventoryVerified } from '../utils/productPresentation';
 import { ProductImage } from './ProductImage';
 
 interface SpotlightWideBannerProps {
@@ -31,9 +31,14 @@ export const SpotlightWideBanner: React.FC<SpotlightWideBannerProps> = ({
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
             <PackageCheck className="h-4 w-4 text-emerald-700" />
-            {product.stock > 0 ? 'In stock' : 'Currently out of stock'}
+            {!isInventoryVerified(product.inventoryStatus)
+              ? 'Inventory not verified'
+              : product.stock > 0 ? 'In stock' : 'Currently out of stock'}
           </span>
         </div>
+        {isEstimatedOlistPrice(product.sku) && (
+          <p className="mt-1 text-[11px] text-amber-800">Historical price estimate, not a current market price</p>
+        )}
         <button
           onClick={() => onSelectProduct(product.id)}
           className="mt-6 inline-flex w-fit items-center gap-2 rounded-xl bg-amber-400 px-6 py-3 text-xs font-bold uppercase tracking-wider text-slate-950 shadow-sm transition-colors hover:bg-amber-300"
