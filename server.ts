@@ -15,6 +15,13 @@ import statusRoutes from './server/routes/statusRoutes';
 import datasetRoutes from './server/routes/datasetRoutes';
 import { db } from './server/db/database';
 import { formatMongoError } from './server/db/mongo';
+import { isDemoModeEnabled } from './server/config/demoMode';
+import {
+  DemoReservationReconciliationError,
+  reconcileExpiredDemoReservations,
+} from './server/payments/demoReservationReconciler';
+import { getRazorpayConfig, getRazorpayStartupMessage } from './server/payments/razorpay';
+import { getHelmetOptions } from './server/config/contentSecurityPolicy';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,26 +29,7 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      imgSrc: ["'self'", 'data:'],
-      scriptSrc: [
-        "'self'",
-        'https://checkout.razorpay.com',
-        ...(!isProduction ? ["'unsafe-inline'"] : []),
-      ],
-      frameSrc: ["'self'", 'https://checkout.razorpay.com', 'https://api.razorpay.com'],
-      connectSrc: [
-        "'self'",
-        'https://api.razorpay.com',
-        'https://lumberjack.razorpay.com',
-        ...(!isProduction ? ['ws:'] : []),
-      ],
-      ...(!isProduction ? { styleSrc: ["'self'", "'unsafe-inline'"] } : {}),
-    },
-  },
-}));
+app.use(helmet(getHelmetOptions(isProduction)));
 
 const corsOrigins = (process.env.CORS_ORIGINS ?? (isProduction ? '' : 'http://localhost:3000'))
   .split(',')
@@ -188,6 +176,24 @@ async function startServer() {
     console.error('[Server] MongoDB is unavailable; database-backed APIs will return HTTP 503:', formatMongoError(error));
   }
 
+  if (isDemoModeEnabled()) {
+    const reconcileDemoReservations = async () => {
+      try {
+        const result = await reconcileExpiredDemoReservations();
+        if (result.released > 0) {
+          console.info(`[DemoInventory] Released ${result.released} expired reservation(s).`);
+        }
+      } catch (error) {
+        const stage = error instanceof DemoReservationReconciliationError ? error.stage : 'unknown reconciliation operation';
+        const errorName = error instanceof DemoReservationReconciliationError ? error.sourceErrorName : 'UnknownError';
+        console.error(`[DemoInventory] Reservation reconciliation failed during ${stage} (${errorName}).`);
+      }
+    };
+    const reconciliationTimer = setInterval(() => { void reconcileDemoReservations(); }, 60_000);
+    reconciliationTimer.unref();
+    void reconcileDemoReservations();
+  }
+
   if (!db.isConnected && process.env.MONGODB_URI?.startsWith('mongodb')) {
     const retry = setInterval(() => {
       if (!db.isConnected) {
@@ -220,7 +226,7 @@ async function startServer() {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('AURA store server running');
     console.log(`Port: ${PORT}`);
-    console.log('Razorpay Test Mode: configure credentials to enable checkout');
+    console.log(getRazorpayStartupMessage(getRazorpayConfig().isConfigured));
     console.log(`MongoDB: ${db.connectionState}`);
   });
   const shutdown = () => {

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { once } from 'node:events';
+import express from 'express';
+import helmet from 'helmet';
 import test from 'node:test';
 import {
   getRazorpayConfig,
+  getRazorpayStartupMessage,
   getGatewayPaymentStatus,
   getWebhookPaymentStatus,
   canAccessPaymentOrder,
@@ -13,6 +17,41 @@ import {
   verifyCheckoutSignature,
   verifyWebhookSignature,
 } from './razorpay';
+import { getHelmetOptions } from '../config/contentSecurityPolicy';
+
+test('Razorpay Checkout security policy permits workers and payment popups', () => {
+  for (const isProduction of [false, true]) {
+    const options = getHelmetOptions(isProduction);
+    const directives = options.contentSecurityPolicy.directives;
+    assert.equal(options.crossOriginOpenerPolicy.policy, 'same-origin-allow-popups');
+    assert.deepEqual(directives.workerSrc, ["'self'", 'blob:']);
+    assert.ok(directives.scriptSrc.includes('https://checkout.razorpay.com'));
+    assert.ok(directives.frameSrc.includes('https://checkout.razorpay.com'));
+    assert.ok(directives.connectSrc.includes('https://api.razorpay.com'));
+  }
+});
+
+test('payment popup and Checkout worker policies are emitted as response headers', async () => {
+  const app = express();
+  app.use(helmet(getHelmetOptions(false)));
+  app.get('/', (_req, res) => res.sendStatus(204));
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const response = await fetch(`http://127.0.0.1:${address.port}/`);
+    const policy = response.headers.get('content-security-policy');
+
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin-allow-popups');
+    assert.match(policy || '', /worker-src 'self' blob:/);
+  } finally {
+    server.close();
+    await once(server, 'close');
+  }
+});
 
 test('Razorpay amount conversion validates and rounds trusted rupee totals to paise', () => {
   assert.equal(toRazorpayAmountPaise(125.5), 12550);
@@ -37,6 +76,11 @@ test('Razorpay configuration accepts test keys and rejects live or placeholder k
     RAZORPAY_KEY_ID: 'rzp_test_YourTestKeyIdHere',
     RAZORPAY_KEY_SECRET: 'YourRazorpaySecretKeyHere',
   }).isConfigured, false);
+});
+
+test('Razorpay startup message reflects configuration without exposing credentials', () => {
+  assert.equal(getRazorpayStartupMessage(true), 'Razorpay TEST mode enabled.');
+  assert.equal(getRazorpayStartupMessage(false), 'Razorpay TEST credentials are missing; checkout is disabled.');
 });
 
 test('Checkout signature validates only for the trusted Razorpay order and payment', () => {
