@@ -5,9 +5,13 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import {
   formatCategoryLabel,
-  hasSimulatedOlistInventory,
+  getCustomerProductBrand,
+  getCustomerProductDescription,
+  getCustomerProductName,
+  getAvailablePurchaseStock,
+  getPurchaseUnavailableReason,
+  isDemoPurchase,
   isEstimatedOlistPrice,
-  isInventoryVerified,
 } from '../utils/productPresentation';
 import { ProductImage } from './ProductImage';
 
@@ -20,7 +24,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
   const { addToCart } = useCart();
   const { isWishlisted, toggleWishlist } = useWishlist();
   const [justAdded, setJustAdded] = useState(false);
-  const canPurchase = isInventoryVerified(product.inventoryStatus) && product.stock > 0;
+  const availableStock = getAvailablePurchaseStock(product);
+  const canPurchase = availableStock > 0;
+  const isDemoProduct = isDemoPurchase(product);
+  const purchaseUnavailableReason = getPurchaseUnavailableReason(product);
+  const productName = getCustomerProductName(product);
+  const productBrand = getCustomerProductBrand(product.brand);
+  const productDescription = getCustomerProductDescription(product.description);
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -36,7 +46,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
       onClick={() => onSelect(product.id)}
       className="group bg-white rounded-xl border border-slate-200/90 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col"
     >
-      {/* Product Image Slot (65-70% height) with Fallback Container */}
       <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden flex items-center justify-center">
         <ProductImage
           src={product.image}
@@ -53,22 +62,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
             event.stopPropagation();
             toggleWishlist(product.id);
           }}
-          aria-label={isWishlisted(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+          aria-label={isWishlisted(product.id) ? `Remove ${productName} from wishlist` : `Add ${productName} to wishlist`}
           aria-pressed={isWishlisted(product.id)}
           className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-slate-600 shadow-sm transition-colors hover:text-rose-600"
         >
           <Heart className={`h-4 w-4 ${isWishlisted(product.id) ? 'fill-rose-500 text-rose-500' : ''}`} />
         </button>
 
-        {/* Stock status indicator (unboxed subtle text) */}
-        {canPurchase && product.stock <= 5 && (
+        {canPurchase && availableStock <= 5 && (
           <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-amber-700 text-[11px] font-semibold px-2 py-0.5 rounded shadow-xs">
-            Only {product.stock} left
-          </div>
-        )}
-        {!canPurchase && (
-          <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-rose-700 text-[11px] font-semibold px-2 py-0.5 rounded shadow-xs">
-            {isInventoryVerified(product.inventoryStatus) ? 'Out of Stock' : 'Inventory Not Verified'}
+            Only {availableStock} left
           </div>
         )}
       </div>
@@ -79,30 +82,23 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
           {/* Unboxed Metadata with Typographic Separator */}
           <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-1.5 uppercase tracking-wider font-medium">
             <span>{formatCategoryLabel(product.category)}</span>
-            {product.brand && (
+            {productBrand && (
               <>
                 <span aria-hidden="true">·</span>
-                <span>{product.brand}</span>
+                <span>{productBrand}</span>
               </>
             )}
           </div>
 
           {/* Product Title */}
           <h3 className="text-sm font-semibold text-slate-900 group-hover:text-slate-700 transition-colors line-clamp-1 leading-snug">
-            {product.name}
+            {productName}
           </h3>
 
           {/* Short Description */}
           <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
-            {product.description}
+            {productDescription}
           </p>
-          {!isInventoryVerified(product.inventoryStatus) && (
-            <p className="mt-2 text-[10px] font-medium text-amber-700">
-              {hasSimulatedOlistInventory(product.inventoryMode, product.inventoryStatus)
-                ? 'Demo quantity; not verified or sourced from Olist'
-                : 'Inventory quantity has not been physically verified'}
-            </p>
-          )}
         </div>
 
         {/* Price & Action Row */}
@@ -111,18 +107,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
             <span className="text-base font-bold text-slate-900 font-mono tabular-nums">
               ₹{product.price.toLocaleString('en-IN')}
             </span>
+            {isDemoProduct && (
+              <p className="mt-1 text-[10px] font-medium text-violet-700">Demo stock · TEST checkout</p>
+            )}
             {isEstimatedOlistPrice(product.sku) && (
               <p className="text-[10px] text-amber-700">Historical price estimate</p>
             )}
-            <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
-              {product.numReviews > 0 ? (
-                <>
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  <span>{product.rating.toFixed(1)}</span>
-                  <span>({product.numReviews})</span>
-                </>
-              ) : <span>No reviews yet</span>}
-            </div>
+            {product.numReviews > 0 && (
+              <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+                <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                <span>{product.rating.toFixed(1)}</span>
+                <span>({product.numReviews})</span>
+              </div>
+            )}
           </div>
 
           <button
@@ -135,6 +132,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
                 ? 'bg-emerald-600 text-white'
                 : 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
             }`}
+            aria-label={canPurchase ? `Add ${productName} to cart` : `${productName}: ${purchaseUnavailableReason}`}
+            title={!canPurchase ? purchaseUnavailableReason : undefined}
           >
             {justAdded ? (
               <>
@@ -144,11 +143,16 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onSelect }) =
             ) : (
               <>
                 <ShoppingBag className="w-3.5 h-3.5" />
-                <span>{canPurchase ? 'Add' : 'Unavailable'}</span>
+                <span>Add</span>
               </>
             )}
           </button>
         </div>
+        {!canPurchase && purchaseUnavailableReason && (
+          <p role="status" className="text-[10px] leading-relaxed text-slate-500">
+            {purchaseUnavailableReason}
+          </p>
+        )}
       </div>
     </div>
   );

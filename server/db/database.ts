@@ -1,9 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import { randomUUID } from 'crypto';
-import bcrypt from 'bcryptjs';
-import mongoose from 'mongoose';
-import { User, Product, Order, CartItem, DemoPaymentAttempt, Review } from '../../src/types';
+import { randomInt, randomUUID } from 'crypto';
+import mongoose, { AnyBulkWriteOperation } from 'mongoose';
+import {
+  DemoInventoryBulkProductIssue,
+  DemoInventoryBulkResult,
+  User,
+  Product,
+  Order,
+  CartItem,
+  DemoPaymentAttempt,
+  Review,
+} from '../../src/types';
 import { UserModel } from '../models/User';
 import { IUserDocument } from '../models/User';
 import { ProductModel } from '../models/Product';
@@ -13,8 +21,14 @@ import { OrderModel } from '../models/Order';
 import { IOrderDocument } from '../models/Order';
 import { closeMongo, connectMongo, getMongoConnectionState, pingMongo } from './mongo';
 import { catalogSeed } from '../catalog/catalogSeed';
-import { isManagedOlistCatalogProduct } from '../../src/utils/productPresentation';
-import { makeStockAllocationOperation } from '../orders/inventory';
+import {
+  getAvailablePurchaseStock,
+  getPurchaseUnavailableReason,
+  isManagedOlistCatalogProduct,
+} from '../../src/utils/productPresentation';
+import { makeDemoStockAllocationOperation, makeStockAllocationOperation } from '../orders/inventory';
+import { DEMO_RESERVATION_TTL_MS, isDemoModeEnabled, isNonProductionMongoTarget } from '../config/demoMode';
+import { getRazorpayConfig } from '../payments/razorpay';
 import { calculateReviewSummary } from '../reviews/reviewRules';
 
 const DATASET_DIR = path.resolve(process.cwd(), 'dataset');
@@ -40,6 +54,13 @@ export class OrderCancellationError extends Error {
     this.name = 'OrderCancellationError';
   }
 }
+
+export type CustomerOrderHistoryRemovalResult =
+  | 'removed'
+  | 'already-removed'
+  | 'not-found'
+  | 'forbidden'
+  | 'not-cancelled';
 
 export class InventoryError extends Error {
   constructor(message: string) {
@@ -77,28 +98,42 @@ const userFromDocument = (document: IUserDocument): User => ({
   updatedAt: normalizeDate(document.updatedAt as Date | string | undefined),
 });
 
-const productFromDocument = (document: IProductDocument): Product => ({
-  id: String(document.id),
-  name: String(document.name),
-  description: String(document.description),
-  price: Number(document.price),
-  category: String(document.category),
-  image: String(document.image),
-  stock: Number(document.stock),
-  sku: String(document.sku),
-  status: document.status === 'inactive' ? 'inactive' : 'active',
-  inventoryMode: document.inventoryMode === 'simulated-demo' ? 'simulated-demo' : undefined,
-  inventoryStatus: document.inventoryStatus === 'verified' ? 'verified' : 'unverified',
-  inventoryVerifiedAt: document.inventoryVerifiedAt
-    ? normalizeDate(document.inventoryVerifiedAt as Date | string)
-    : undefined,
-  rating: Number(document.rating || 0),
-  numReviews: Number(document.numReviews || 0),
-  brand: String(document.brand || ''),
-  features: Array.isArray(document.features) ? document.features.map(String) : [],
-  createdAt: normalizeDate(document.createdAt as Date | string | undefined),
-  updatedAt: normalizeDate(document.updatedAt as Date | string | undefined),
-});
+export const productFromDocument = (document: IProductDocument): Product => {
+  const demoModeEnabled = isDemoModeEnabled();
+  const demoStockValue = Number(document.demoStock || 0);
+  const product: Product = {
+    id: String(document.id),
+    name: String(document.name),
+    description: String(document.description),
+    price: Number(document.price),
+    category: String(document.category),
+    image: String(document.image),
+    stock: Number(document.stock),
+    sku: String(document.sku),
+    status: document.status === 'inactive' ? 'inactive' : 'active',
+    inventoryMode: document.inventoryMode === 'simulated-demo' ? 'simulated-demo' : undefined,
+    inventoryStatus: document.inventoryStatus === 'verified' ? 'verified' : 'unverified',
+    demoModeEnabled,
+    demoPurchasingAvailable: demoModeEnabled && getRazorpayConfig().isConfigured,
+    demoEligible: document.demoEligible === true,
+    demoStock: Number.isSafeInteger(demoStockValue) && demoStockValue >= 0 ? demoStockValue : 0,
+    inventoryVerifiedAt: document.inventoryVerifiedAt
+      ? normalizeDate(document.inventoryVerifiedAt as Date | string)
+      : undefined,
+    rating: Number(document.rating || 0),
+    numReviews: Number(document.numReviews || 0),
+    brand: String(document.brand || ''),
+    features: Array.isArray(document.features) ? document.features.map(String) : [],
+    createdAt: normalizeDate(document.createdAt as Date | string | undefined),
+    updatedAt: normalizeDate(document.updatedAt as Date | string | undefined),
+  };
+  const canPurchase = product.status === 'active' && getAvailablePurchaseStock(product) > 0;
+  return {
+    ...product,
+    canPurchase,
+    purchaseUnavailableReason: canPurchase ? null : getPurchaseUnavailableReason(product) || 'This product is not available for purchase.',
+  };
+};
 
 const reviewFromDocument = (document: IReviewDocument): Review => ({
   id: String(document.id),
@@ -111,11 +146,27 @@ const reviewFromDocument = (document: IReviewDocument): Review => ({
 });
 
 const orderFromDocument = (document: IOrderDocument): Order => {
-  const { checkoutIdempotencyKey: _checkoutKey, checkoutPayloadHash: _payloadHash, ...order } = { ...document };
+  const {
+    checkoutIdempotencyKey: _checkoutKey,
+    checkoutPayloadHash: _payloadHash,
+    hiddenFromCustomerAt: _hiddenFromCustomerAt,
+    ...order
+  } = { ...document };
   return {
     ...order,
     id: String(order.id),
     orderNumber: String(order.orderNumber),
+    purchaseMode: order.purchaseMode === 'demo' ? 'demo' : 'physical',
+    orderItems: order.orderItems.map((item) => ({
+      ...item,
+      purchaseMode: item.purchaseMode ?? (order.purchaseMode === 'demo' ? 'demo' : 'physical'),
+    })),
+    demoReservationExpiresAt: order.demoReservationExpiresAt
+      ? normalizeDate(order.demoReservationExpiresAt as Date | string)
+      : undefined,
+    demoGatewayOrderExpiresAt: order.demoGatewayOrderExpiresAt
+      ? normalizeDate(order.demoGatewayOrderExpiresAt as Date | string)
+      : undefined,
     createdAt: normalizeDate(order.createdAt as Date | string | undefined),
     updatedAt: normalizeDate(order.updatedAt as Date | string | undefined),
     paidAt: order.paidAt ? normalizeDate(order.paidAt as Date | string) : undefined,
@@ -161,9 +212,62 @@ const isGeneratedLegacyProduct = (product: Pick<Product, 'sku' | 'name'>): boole
   product.sku.toUpperCase().startsWith('OLIST-')
   || /^(classic|modern|everyday|premium|essential|contemporary|signature) .+ (accent|essential|find|select|pick)$/i.test(product.name);
 
+type DemoInventoryProductSummary = Pick<IProductDocument, 'id' | 'name'>;
+
+interface DemoInventoryBulkPlan {
+  operations: AnyBulkWriteOperation<IProductDocument>[];
+  updateProducts: DemoInventoryProductSummary[];
+  skippedProducts: DemoInventoryBulkProductIssue[];
+}
+
+export const buildDemoInventoryBulkPlan = (
+  products: DemoInventoryProductSummary[],
+  activeReservedQuantities: ReadonlyMap<string, number>,
+  generateStock: (minimum: number, maximumExclusive: number) => number = randomInt,
+): DemoInventoryBulkPlan => {
+  const operations: AnyBulkWriteOperation<IProductDocument>[] = [];
+  const updateProducts: DemoInventoryProductSummary[] = [];
+  const skippedProducts: DemoInventoryBulkProductIssue[] = [];
+
+  for (const product of products) {
+    const activeReservedQuantity = activeReservedQuantities.get(product.id) || 0;
+    if (activeReservedQuantity > 0) {
+      skippedProducts.push({
+        productId: product.id,
+        name: product.name,
+        reason: 'Active demo reservations exist; inventory was left unchanged.',
+        activeReservedQuantity,
+      });
+      continue;
+    }
+
+    const demoStock = generateStock(1, 101);
+    if (!Number.isSafeInteger(demoStock) || demoStock < 1 || demoStock > 100) {
+      throw new InventoryError('The demo stock generator returned a quantity outside the allowed range.');
+    }
+    operations.push({
+      updateOne: {
+        filter: { id: product.id },
+        update: { $set: { demoEligible: true, demoStock } },
+      },
+    });
+    updateProducts.push(product);
+  }
+
+  return { operations, updateProducts, skippedProducts };
+};
+
 class MongoDatabase {
   public get isConnected(): boolean {
     return getMongoConnectionState() === 'connected';
+  }
+
+  public get databaseName(): string | undefined {
+    return mongoose.connection.db?.databaseName;
+  }
+
+  public isNonProductionDatabase(): boolean {
+    return isNonProductionMongoTarget(this.databaseName, process.env.MONGODB_URI);
   }
 
   public get connectionState(): string {
@@ -176,7 +280,6 @@ class MongoDatabase {
 
   public async connect(): Promise<void> {
     await connectMongo();
-    await this.createConfiguredAdmin();
     await this.disableGeneratedLegacyProducts();
     await this.seedCatalogIfMissing();
   }
@@ -187,29 +290,6 @@ class MongoDatabase {
 
   public async disconnect(): Promise<void> {
     await closeMongo();
-  }
-
-  private async createConfiguredAdmin(): Promise<void> {
-    const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-    const password = process.env.ADMIN_PASSWORD;
-    if (!email || !password) return;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 12) {
-      throw new Error('ADMIN_EMAIL must be valid and ADMIN_PASSWORD must contain at least 12 characters.');
-    }
-    if (await UserModel.exists({ email })) return;
-    const now = new Date();
-    await UserModel.create({
-      id: `usr-${randomUUID()}`,
-      name: 'Store Administrator',
-      email,
-      password: await bcrypt.hash(password, 12),
-      role: 'admin',
-      phone: '',
-      cartItems: [],
-      wishlistIds: [],
-      createdAt: now,
-      updatedAt: now,
-    });
   }
 
   private async seedCatalogIfMissing(): Promise<void> {
@@ -295,6 +375,10 @@ class MongoDatabase {
         sku: product.sku,
         inventoryMode: product.inventoryMode,
         inventoryStatus: product.inventoryStatus,
+        demoModeEnabled: product.demoModeEnabled,
+        demoPurchasingAvailable: product.demoPurchasingAvailable,
+        demoEligible: product.demoEligible,
+        demoStock: product.demoStock,
       });
     }
     return items;
@@ -310,7 +394,10 @@ class MongoDatabase {
       }
       const product = await this.findProductById(item.productId);
       if (!product || product.status !== 'active') throw new Error(`Product ${item.productId} is unavailable.`);
-      if (product.stock > 0) valid.push({ productId: product.id, quantity: Math.min(item.quantity, product.stock) });
+      const availableStock = isDemoModeEnabled() && product.demoEligible
+        ? product.demoStock || 0
+        : product.stock;
+      if (availableStock > 0) valid.push({ productId: product.id, quantity: Math.min(item.quantity, availableStock) });
     }
     const result = await UserModel.updateOne({ id }, { $set: { cartItems: valid } });
     if (!result.matchedCount) throw new Error('User not found.');
@@ -469,6 +556,142 @@ class MongoDatabase {
     return updated ? productFromDocument(updated) : undefined;
   }
 
+  public async updateDemoInventory(
+    id: string,
+    eligible: boolean,
+    stock: number,
+  ): Promise<Product | undefined> {
+    this.assertConnected();
+    if (!isDemoModeEnabled()) throw new Error('Demo inventory mode is disabled.');
+    const session = await mongoose.startSession();
+    let updatedProduct: IProductDocument | null = null;
+    try {
+      await session.withTransaction(async () => {
+        const pendingOrder = await OrderModel.exists({
+          purchaseMode: 'demo',
+          demoReservationStatus: 'reserved',
+          status: 'Pending',
+          'orderItems.product': id,
+        }).session(session);
+        if (pendingOrder) {
+          throw new InventoryError('Demo stock cannot be changed while a demo order is reserving this product.');
+        }
+        updatedProduct = await ProductModel.findOneAndUpdate(
+          { id },
+          { $set: { demoEligible: eligible, demoStock: eligible ? stock : 0 } },
+          { new: true, runValidators: true, session },
+        ).lean().exec();
+      });
+    } finally {
+      await session.endSession();
+    }
+    return updatedProduct ? productFromDocument(updatedProduct) : undefined;
+  }
+
+  public async bulkEnableAllDemoInventory(): Promise<DemoInventoryBulkResult> {
+    this.assertConnected();
+    if (!isDemoModeEnabled()) throw new InventoryError('Demonstration inventory mode is disabled.');
+    if (!this.isNonProductionDatabase()) {
+      throw new InventoryError('Bulk demo inventory is allowed only on a confirmed non-production database.');
+    }
+
+    const products = await ProductModel.find({})
+      .select({ id: 1, name: 1 })
+      .sort({ id: 1 })
+      .lean()
+      .exec();
+    const result: DemoInventoryBulkResult = {
+      totalProducts: products.length,
+      processedCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      skippedProducts: [],
+      failedProducts: [],
+    };
+    if (products.length === 0) return result;
+
+    const session = await mongoose.startSession();
+    const batchSize = 500;
+    try {
+      for (let offset = 0; offset < products.length; offset += batchSize) {
+        const batch = products.slice(offset, offset + batchSize);
+        const productIds = batch.map((product) => product.id);
+        let batchPlan: DemoInventoryBulkPlan & { missingProducts: DemoInventoryBulkProductIssue[] } | undefined;
+
+        try {
+          await session.withTransaction(async () => {
+            batchPlan = undefined;
+            const currentProducts = await ProductModel.find({ id: { $in: productIds } })
+              .select({ id: 1, name: 1 })
+              .session(session)
+              .lean()
+              .exec();
+            const currentIds = new Set(currentProducts.map((product) => product.id));
+            const missingProducts = batch
+              .filter((product) => !currentIds.has(product.id))
+              .map((product) => ({
+                productId: product.id,
+                name: product.name,
+                reason: 'Product no longer exists.',
+              }));
+
+            const reservationOrders = await OrderModel.find({
+              status: 'Pending',
+              demoReservationStatus: 'reserved',
+              'orderItems.product': { $in: productIds },
+              $or: [{ purchaseMode: 'demo' }, { 'orderItems.purchaseMode': 'demo' }],
+            })
+              .select({ purchaseMode: 1, orderItems: 1 })
+              .session(session)
+              .lean()
+              .exec();
+            const reservedQuantities = new Map<string, number>();
+            const productIdSet = new Set(productIds);
+            for (const order of reservationOrders) {
+              for (const item of order.orderItems) {
+                if (!productIdSet.has(item.product) || (order.purchaseMode !== 'demo' && item.purchaseMode !== 'demo')) continue;
+                reservedQuantities.set(
+                  item.product,
+                  (reservedQuantities.get(item.product) || 0) + item.quantity,
+                );
+              }
+            }
+
+            const plan = buildDemoInventoryBulkPlan(currentProducts, reservedQuantities);
+            batchPlan = { ...plan, missingProducts };
+            if (plan.operations.length > 0) {
+              const writeResult = await ProductModel.bulkWrite(plan.operations, { session, ordered: true });
+              if (writeResult.matchedCount !== plan.operations.length) {
+                throw new Error('Bulk demo inventory update did not match every planned product.');
+              }
+            }
+          });
+
+          if (!batchPlan) throw new Error('Bulk demo inventory batch returned no result.');
+          result.updatedCount += batchPlan.updateProducts.length;
+          result.skippedProducts.push(...batchPlan.skippedProducts, ...batchPlan.missingProducts);
+        } catch (error) {
+          console.error('[Admin] Demo inventory bulk batch failed:', error instanceof Error ? error.name : 'Unknown error.');
+          result.skippedProducts.push(...(batchPlan?.skippedProducts || []), ...(batchPlan?.missingProducts || []));
+          const failedProducts = batchPlan?.updateProducts || batch;
+          result.failedProducts.push(...failedProducts.map((product) => ({
+            productId: product.id,
+            name: product.name,
+            reason: 'The transaction for this batch failed; no updates were committed.',
+          })));
+        }
+      }
+    } finally {
+      await session.endSession();
+    }
+
+    result.skippedCount = result.skippedProducts.length;
+    result.failedCount = result.failedProducts.length;
+    result.processedCount = result.updatedCount + result.skippedCount + result.failedCount;
+    return result;
+  }
+
   public async deleteProduct(id: string): Promise<boolean> {
     this.assertConnected();
     const result = await ProductModel.updateOne(
@@ -511,6 +734,13 @@ class MongoDatabase {
     payloadHash: string,
   ): Promise<Order> {
     this.assertConnected();
+    const purchaseMode = order.purchaseMode ?? 'physical';
+    if (purchaseMode === 'demo' && !isDemoModeEnabled()) {
+      throw new InventoryError('Demo inventory mode is disabled.');
+    }
+    if (order.orderItems.some((item) => (item.purchaseMode ?? purchaseMode) !== purchaseMode)) {
+      throw new InventoryError('Physical and demo inventory cannot be mixed in one order.');
+    }
     const existing = await this.findOrderByCheckoutRequest(order.user.id, idempotencyKey, payloadHash);
     if (existing) return existing;
     const session = await mongoose.startSession();
@@ -520,7 +750,10 @@ class MongoDatabase {
     try {
       await session.withTransaction(async () => {
         for (const item of order.orderItems) {
-          const allocationOperation = makeStockAllocationOperation(item.product, item.quantity);
+          const itemPurchaseMode = item.purchaseMode ?? purchaseMode;
+          const allocationOperation = itemPurchaseMode === 'demo'
+            ? makeDemoStockAllocationOperation(item.product, item.quantity)
+            : makeStockAllocationOperation(item.product, item.quantity);
           const allocation = await ProductModel.updateOne(
             allocationOperation.filter,
             allocationOperation.update,
@@ -531,7 +764,18 @@ class MongoDatabase {
           }
         }
         const [created] = await OrderModel.create(
-          [{ ...order, id, orderNumber, checkoutIdempotencyKey: idempotencyKey, checkoutPayloadHash: payloadHash }],
+          [{
+            ...order,
+            purchaseMode,
+            ...(purchaseMode === 'demo' ? {
+              demoReservationStatus: 'reserved',
+              demoReservationExpiresAt: new Date(Date.now() + DEMO_RESERVATION_TTL_MS),
+            } : {}),
+            id,
+            orderNumber,
+            checkoutIdempotencyKey: idempotencyKey,
+            checkoutPayloadHash: payloadHash,
+          }],
           { session },
         );
         result = orderFromDocument(created.toObject());
@@ -632,14 +876,228 @@ class MongoDatabase {
 
   public async findOrdersByUser(userId: string): Promise<Order[]> {
     this.assertConnected();
-    const orders = await OrderModel.find({ 'user.id': userId }).sort({ createdAt: -1 }).lean().exec();
+    const orders = await OrderModel.find({
+      'user.id': userId,
+      hiddenFromCustomerAt: null,
+    }).sort({ createdAt: -1 }).lean().exec();
     return orders.map((order) => orderFromDocument(order));
+  }
+
+  public async removeCancelledOrderFromCustomerHistory(
+    orderId: string,
+    userId: string,
+  ): Promise<CustomerOrderHistoryRemovalResult> {
+    this.assertConnected();
+    const order = await OrderModel.findOne({ $or: [{ id: orderId }, { orderNumber: orderId }] })
+      .select('id user.id status isPaid hiddenFromCustomerAt')
+      .lean()
+      .exec();
+    if (!order) return 'not-found';
+    if (order.user.id !== userId) return 'forbidden';
+    if (order.status !== 'Cancelled' || order.isPaid) return 'not-cancelled';
+    if (order.hiddenFromCustomerAt) return 'already-removed';
+
+    const updated = await OrderModel.findOneAndUpdate(
+      {
+        id: order.id,
+        'user.id': userId,
+        status: 'Cancelled',
+        isPaid: false,
+        hiddenFromCustomerAt: null,
+      },
+      { $set: { hiddenFromCustomerAt: new Date() } },
+      { new: true },
+    ).lean().exec();
+    if (updated) return 'removed';
+
+    const latest = await OrderModel.findOne({ id: order.id })
+      .select('user.id status isPaid hiddenFromCustomerAt')
+      .lean()
+      .exec();
+    if (!latest) return 'not-found';
+    if (latest.user.id !== userId) return 'forbidden';
+    if (latest.status !== 'Cancelled' || latest.isPaid) return 'not-cancelled';
+    return latest.hiddenFromCustomerAt ? 'already-removed' : 'not-cancelled';
   }
 
   public async findAllOrders(): Promise<Order[]> {
     this.assertConnected();
     const orders = await OrderModel.find().sort({ createdAt: -1 }).lean().exec();
     return orders.map((order) => orderFromDocument(order));
+  }
+
+  public async findExpiredDemoReservations(before = new Date()): Promise<Order[]> {
+    this.assertConnected();
+    const orders = await OrderModel.find({
+      purchaseMode: 'demo',
+      demoReservationStatus: 'reserved',
+      demoReservationExpiresAt: { $lte: before },
+      isPaid: false,
+      status: 'Pending',
+    }).lean().exec();
+    return orders.map((order) => orderFromDocument(order));
+  }
+
+  public async releaseExpiredDemoReservation(orderId: string, before = new Date()): Promise<Order | undefined> {
+    this.assertConnected();
+    const session = await mongoose.startSession();
+    let result: Order | undefined;
+    try {
+      await session.withTransaction(async () => {
+        const current = await OrderModel.findOne({
+          id: orderId,
+          purchaseMode: 'demo',
+          demoReservationStatus: 'reserved',
+          demoReservationExpiresAt: { $lte: before },
+          isPaid: false,
+          status: 'Pending',
+        }).session(session).lean().exec();
+        if (!current) return;
+
+        const updated = await OrderModel.findOneAndUpdate(
+          {
+            id: orderId,
+            purchaseMode: 'demo',
+            demoReservationStatus: 'reserved',
+            demoReservationExpiresAt: { $lte: before },
+            isPaid: false,
+            status: 'Pending',
+          },
+          { $set: { status: 'Cancelled', demoReservationStatus: 'released' } },
+          { new: true, runValidators: true, session },
+        ).lean().exec();
+        if (!updated) return;
+
+        for (const item of current.orderItems) {
+          const restored = await ProductModel.updateOne(
+            { id: item.product },
+            { $inc: { demoStock: item.quantity } },
+            { session },
+          );
+          if (restored.modifiedCount !== 1) {
+            throw new Error(`Unable to restore demo inventory for expired order item "${item.product}".`);
+          }
+        }
+        result = orderFromDocument(updated);
+      });
+    } finally {
+      await session.endSession();
+    }
+    return result;
+  }
+
+  private async cancelUnpaidOrder(
+    orderId: string,
+    userId: string,
+    payment: { method: 'Razorpay'; razorpayOrderId: string }
+      | { method: 'Local Demo' | 'Cash on Delivery' },
+  ): Promise<Order | undefined> {
+    this.assertConnected();
+    const session = await mongoose.startSession();
+    let result: Order | undefined;
+    try {
+      await session.withTransaction(async () => {
+        result = undefined;
+        const current = await OrderModel.findOne({ id: orderId, 'user.id': userId })
+          .session(session)
+          .lean()
+          .exec();
+        if (!current) return;
+        if (current.status === 'Cancelled') {
+          throw new OrderCancellationError('This order is already cancelled.');
+        }
+        if (current.isPaid || current.status !== 'Pending') {
+          throw new OrderCancellationError('Only unpaid pending orders can be cancelled.');
+        }
+        if (current.demoPaymentAttempts?.some((attempt) => attempt.outcome === 'success')) {
+          throw new OrderCancellationError('A successful payment attempt prevents cancellation.');
+        }
+        if (payment.method === 'Razorpay') {
+          if (current.paymentMethod !== 'Razorpay'
+            || current.razorpayOrderId !== payment.razorpayOrderId) {
+            throw new OrderCancellationError('The order changed while its payment status was being checked.');
+          }
+          if (current.paymentResult && current.paymentResult.status !== 'failed') {
+            throw new OrderCancellationError('Payment verification is unresolved; the order and reservation remain unchanged.');
+          }
+          if (current.purchaseMode === 'demo' && current.demoReservationStatus !== 'reserved') {
+            throw new OrderCancellationError('The demonstration reservation is no longer reserved.');
+          }
+        } else if (current.paymentMethod !== payment.method
+          || current.razorpayOrderId
+          || current.paymentResult) {
+          throw new OrderCancellationError('Payment recovery is required because the order may have an unresolved provider payment.');
+        }
+
+        const stateFilter = payment.method === 'Razorpay'
+          ? {
+            razorpayOrderId: payment.razorpayOrderId,
+            $or: [
+              { paymentResult: { $exists: false } },
+              { paymentResult: null },
+              { 'paymentResult.status': 'failed' },
+            ],
+          }
+          : {
+            razorpayOrderId: { $exists: false },
+            paymentResult: { $exists: false },
+          };
+        const updated = await OrderModel.findOneAndUpdate(
+          {
+            id: orderId,
+            'user.id': userId,
+            paymentMethod: payment.method,
+            isPaid: false,
+            status: 'Pending',
+            'demoPaymentAttempts.outcome': { $ne: 'success' },
+            ...stateFilter,
+          },
+          {
+            $set: {
+              status: 'Cancelled',
+              ...(current.purchaseMode === 'demo' ? { demoReservationStatus: 'released' } : {}),
+            },
+          },
+          { new: true, runValidators: true, session },
+        ).lean().exec();
+        if (!updated) {
+          throw new OrderCancellationError('The order changed while it was being cancelled; refresh and try again.');
+        }
+
+        for (const item of current.orderItems) {
+          const restored = await ProductModel.updateOne(
+            { id: item.product },
+            { $inc: current.purchaseMode === 'demo'
+              ? { demoStock: item.quantity }
+              : { stock: item.quantity } },
+            { session },
+          );
+          if (restored.modifiedCount !== 1) {
+            throw new Error(`Unable to restore inventory for cancelled order item "${item.product}".`);
+          }
+        }
+        result = orderFromDocument(updated);
+      });
+    } finally {
+      await session.endSession();
+    }
+    return result;
+  }
+
+  public async cancelUnpaidOrderWithoutGateway(
+    orderId: string,
+    userId: string,
+    paymentMethod: 'Local Demo' | 'Cash on Delivery',
+  ): Promise<Order | undefined> {
+    return this.cancelUnpaidOrder(orderId, userId, { method: paymentMethod });
+  }
+
+  public async cancelOrderAfterVerifiedGatewayExpiry(
+    orderId: string,
+    userId: string,
+    razorpayOrderId: string,
+  ): Promise<Order | undefined> {
+    return this.cancelUnpaidOrder(orderId, userId, { method: 'Razorpay', razorpayOrderId });
   }
 
   public async updateOrderStatus(orderId: string, status: Order['status']): Promise<Order | undefined> {
@@ -671,7 +1129,12 @@ class MongoDatabase {
 
           const updated = await OrderModel.findOneAndUpdate(
             { id: current.id, isPaid: false, status: { $ne: 'Cancelled' } },
-            { $set: { status: 'Cancelled' } },
+            {
+              $set: {
+                status: 'Cancelled',
+                ...(current.purchaseMode === 'demo' ? { demoReservationStatus: 'released' } : {}),
+              },
+            },
             { new: true, runValidators: true, session },
           ).lean().exec();
           if (!updated) return;
@@ -679,7 +1142,9 @@ class MongoDatabase {
           for (const item of current.orderItems) {
             const restored = await ProductModel.updateOne(
               { id: item.product },
-              { $inc: { stock: item.quantity } },
+              { $inc: current.purchaseMode === 'demo'
+                ? { demoStock: item.quantity }
+                : { stock: item.quantity } },
               { session },
             );
             if (restored.modifiedCount !== 1) {
@@ -722,21 +1187,54 @@ class MongoDatabase {
     return order ? orderFromDocument(order) : undefined;
   }
 
-  public async updateOrderRazorpayId(orderId: string, razorpayOrderId: string): Promise<Order | undefined> {
+  public async updateOrderRazorpayId(
+    orderId: string,
+    razorpayOrderId: string,
+    demoGatewayOrderExpiresAt?: Date,
+  ): Promise<Order | undefined> {
     this.assertConnected();
+    const now = new Date();
     const updated = await OrderModel.findOneAndUpdate(
       {
         id: orderId,
         paymentMethod: 'Razorpay',
         status: 'Pending',
         isPaid: false,
-        $or: [{ razorpayOrderId: { $exists: false } }, { razorpayOrderId: null }],
+        $and: [
+          { $or: [{ razorpayOrderId: { $exists: false } }, { razorpayOrderId: null }] },
+          {
+            $or: [
+              { purchaseMode: { $ne: 'demo' } },
+              {
+                purchaseMode: 'demo',
+                demoReservationStatus: 'reserved',
+                demoReservationExpiresAt: { $gt: now },
+              },
+            ],
+          },
+        ],
       },
-      { $set: { razorpayOrderId } },
+      {
+        $set: {
+          razorpayOrderId,
+          ...(demoGatewayOrderExpiresAt ? { demoGatewayOrderExpiresAt } : {}),
+        },
+      },
       { new: true },
     ).lean().exec();
     if (updated) return orderFromDocument(updated);
-    const existing = await OrderModel.findOne({ id: orderId, isPaid: false }).lean().exec();
+    const existing = await OrderModel.findOne({
+      id: orderId,
+      paymentMethod: 'Razorpay',
+      status: 'Pending',
+      isPaid: false,
+    }).lean().exec();
+    if (existing?.purchaseMode === 'demo'
+      && (existing.demoReservationStatus !== 'reserved'
+        || !existing.demoReservationExpiresAt
+        || new Date(existing.demoReservationExpiresAt).getTime() <= now.getTime())) {
+      return undefined;
+    }
     return existing ? orderFromDocument(existing) : undefined;
   }
 
@@ -749,13 +1247,19 @@ class MongoDatabase {
   public async updateOrderPayment(orderId: string, paymentResult: NonNullable<Order['paymentResult']>): Promise<Order | undefined> {
     this.assertConnected();
     const updates: Record<string, unknown> = { paymentResult, isPaid: paymentResult.status === 'captured' };
+    const unsets: Record<string, number> = {};
     if (paymentResult.status === 'captured') {
       updates.paidAt = new Date();
       updates.status = 'Processing';
+      const current = await OrderModel.findOne({ id: orderId }).select('purchaseMode').lean().exec();
+      if (current?.purchaseMode === 'demo') {
+        updates.demoReservationStatus = 'consumed';
+        unsets.demoReservationExpiresAt = 1;
+      }
     }
     const order = await OrderModel.findOneAndUpdate(
       { id: orderId, isPaid: false, status: 'Pending' },
-      { $set: updates },
+      { $set: updates, ...(Object.keys(unsets).length ? { $unset: unsets } : {}) },
       { new: true, runValidators: true },
     ).lean().exec();
     return order ? orderFromDocument(order) : undefined;

@@ -5,6 +5,7 @@ import bcrypt from 'bcryptjs';
 import express from 'express';
 import { User } from '../../src/types';
 import { db } from '../db/database';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import authRoutes from './authRoutes';
 
 test('registration, login, and protected profile routes validate and persist credentials safely', async () => {
@@ -33,6 +34,9 @@ test('registration, login, and protected profile routes validate and persist cre
   const app = express();
   app.use(express.json());
   app.use('/api/auth', authRoutes);
+  app.get('/__test/admin-only', requireAuth, requireAdmin, (_req, res) => {
+    res.json({ success: true });
+  });
   const server = app.listen(0, '127.0.0.1');
 
   try {
@@ -132,6 +136,35 @@ test('registration, login, and protected profile routes validate and persist cre
     assert.equal(login.status, 200);
     const loginData = await login.json() as { token: string; user: User };
     assert.equal(loginData.user.password, undefined);
+    assert.equal(loginData.user.role, 'customer');
+
+    const adminPassword = 'ControlledAdminPass123';
+    users.set('admin@aura.store', {
+      id: 'usr-controlled-admin-test',
+      name: 'Controlled Admin',
+      email: 'admin@aura.store',
+      password: await bcrypt.hash(adminPassword, 12),
+      role: 'admin',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    const adminLogin = await send('/login', {
+      email: 'ADMIN@AURA.STORE',
+      password: adminPassword,
+    });
+    assert.equal(adminLogin.status, 200);
+    const adminLoginData = await adminLogin.json() as { token: string; user: User };
+    assert.equal(adminLoginData.user.role, 'admin');
+    assert.equal(adminLoginData.user.password, undefined);
+
+    const adminAccess = await fetch(`http://127.0.0.1:${address.port}/__test/admin-only`, {
+      headers: { Authorization: `Bearer ${adminLoginData.token}` },
+    });
+    assert.equal(adminAccess.status, 200);
+    const customerAdminAccess = await fetch(`http://127.0.0.1:${address.port}/__test/admin-only`, {
+      headers: { Authorization: `Bearer ${loginData.token}` },
+    });
+    assert.equal(customerAdminAccess.status, 403);
 
     const invalidPasswordUpdate = await send('/profile', {
       currentPassword: 'Abc12345',

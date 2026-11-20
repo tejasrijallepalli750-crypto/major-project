@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Zap, Clock, Star, ShoppingBag, Check, ChevronRight } from 'lucide-react';
+import { Zap, Clock, ShoppingBag, Check, ChevronRight } from 'lucide-react';
 import { Product } from '../types';
-import { isInventoryVerified } from '../utils/productPresentation';
+import { getAvailablePurchaseStock, getCustomerProductName } from '../utils/productPresentation';
 import { useCart } from '../context/CartContext';
 
 interface FlashDealsCountdownProps {
@@ -38,7 +38,7 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
 
   const handleQuickAdd = (e: React.MouseEvent, prod: Product) => {
     e.stopPropagation();
-    if (isInventoryVerified(prod.inventoryStatus) && prod.stock > 0) {
+    if (getAvailablePurchaseStock(prod) > 0) {
       addToCart(prod, 1);
       setAddedIds((prev) => ({ ...prev, [prod.id]: true }));
       setTimeout(() => setAddedIds((prev) => ({ ...prev, [prod.id]: false })), 1500);
@@ -46,14 +46,11 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
   };
 
   const pad = (n: number) => n.toString().padStart(2, '0');
-
-  // Select 4 exciting products for flash deals
   const dealProducts = products.slice(0, 4);
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
       <div className="bg-gradient-to-br from-amber-500/10 via-rose-500/5 to-purple-500/10 rounded-3xl p-5 sm:p-8 border border-amber-200/80 shadow-xs">
-        {/* Top Header Row with Live Countdown */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-amber-200/60">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-rose-500 text-white flex items-center justify-center shadow-md animate-pulse">
@@ -74,7 +71,6 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
             </div>
           </div>
 
-          {/* Countdown Clock */}
           <div className="flex items-center gap-3 bg-white/90 backdrop-blur-xs px-4 py-2 rounded-2xl border border-amber-300 shadow-xs">
             <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
               <Clock className="w-4 h-4 text-rose-600" />
@@ -90,7 +86,6 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
           </div>
         </div>
 
-        {/* Deals Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
           {dealProducts.map((prod, idx) => {
             const isAdded = addedIds[prod.id];
@@ -105,11 +100,10 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
                 className="bg-white rounded-2xl border border-slate-200/80 p-4 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
               >
                 <div>
-                  {/* Image slot */}
                   <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 mb-3">
                     <img
                       src={prod.image}
-                      alt={prod.name}
+                      alt={getCustomerProductName(prod)}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                       loading="lazy"
@@ -120,7 +114,7 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
                   </div>
 
                   <h4 className="text-xs font-bold text-slate-900 line-clamp-1 group-hover:text-amber-600 transition-colors">
-                    {prod.name}
+                    {getCustomerProductName(prod)}
                   </h4>
 
                   <div className="flex items-baseline gap-2 mt-1">
@@ -132,7 +126,6 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
                     </span>
                   </div>
 
-                  {/* Claimed progress bar */}
                   <div className="mt-3">
                     <div className="flex items-center justify-between text-[10px] font-semibold text-slate-500 mb-1">
                       <span>{claimedPct}% Claimed</span>
@@ -147,7 +140,6 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
                   </div>
                 </div>
 
-                {/* Quick Action */}
                 <div className="pt-3 mt-3 border-t border-slate-100">
                   <button
                     onClick={(e) => handleQuickAdd(e, prod)}
@@ -175,7 +167,6 @@ export const FlashDealsCountdown: React.FC<FlashDealsCountdownProps> = ({
           })}
         </div>
 
-        {/* View All Deals Strip */}
         <div className="mt-6 flex justify-end">
           <button
             onClick={onViewAllDeals}

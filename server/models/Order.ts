@@ -20,10 +20,12 @@ export interface IOrderDocument {
     category?: string;
     inventoryMode?: 'simulated-demo';
     inventoryStatus?: 'verified' | 'unverified';
+    purchaseMode?: 'physical' | 'demo';
   }>;
   shippingAddress: {
     fullName: string;
     phone: string;
+    email?: string;
     street: string;
     city: string;
     district?: string;
@@ -32,8 +34,13 @@ export interface IOrderDocument {
     country: string;
   };
   razorpayOrderId?: string;
+  purchaseMode?: 'physical' | 'demo';
+  demoReservationStatus?: 'reserved' | 'consumed' | 'released';
+  demoReservationExpiresAt?: Date;
+  demoGatewayOrderExpiresAt?: Date;
   checkoutIdempotencyKey?: string;
   checkoutPayloadHash?: string;
+  hiddenFromCustomerAt?: Date;
   demoPaymentAttempts?: Array<Omit<DemoPaymentAttempt, 'recordedAt'> & { recordedAt: Date }>;
   paymentMethod: string;
   paymentResult?: {
@@ -71,6 +78,7 @@ const orderItemSchema = new Schema(
     category: { type: String, default: '' },
     inventoryMode: { type: String, enum: ['simulated-demo'] },
     inventoryStatus: { type: String, enum: ['verified', 'unverified'] },
+    purchaseMode: { type: String, enum: ['physical', 'demo'] },
   },
   { _id: false },
 );
@@ -89,6 +97,7 @@ const orderSchema = new Schema<IOrderDocument>(
     shippingAddress: {
       fullName: { type: String, required: true },
       phone: { type: String, required: true },
+      email: { type: String, trim: true, lowercase: true },
       street: { type: String, required: true },
       city: { type: String, required: true },
       district: { type: String, default: '' },
@@ -97,8 +106,13 @@ const orderSchema = new Schema<IOrderDocument>(
       country: { type: String, default: 'India' },
     },
     razorpayOrderId: { type: String, index: true, sparse: true },
+    purchaseMode: { type: String, enum: ['physical', 'demo'], default: 'physical', index: true },
+    demoReservationStatus: { type: String, enum: ['reserved', 'consumed', 'released'] },
+    demoReservationExpiresAt: { type: Date, index: true },
+    demoGatewayOrderExpiresAt: { type: Date },
     checkoutIdempotencyKey: { type: String },
     checkoutPayloadHash: { type: String },
+    hiddenFromCustomerAt: { type: Date },
     demoPaymentAttempts: {
       type: [{
         attemptId: { type: String, required: true },

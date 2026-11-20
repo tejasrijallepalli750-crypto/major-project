@@ -15,6 +15,8 @@ export interface IProductDocument {
   inventoryStatus?: 'verified' | 'unverified';
   inventoryVerifiedAt?: Date | string;
   inventoryVerifiedBy?: string;
+  demoEligible?: boolean;
+  demoStock?: number;
   rating: number;
   numReviews: number;
   brand: string;
@@ -39,6 +41,8 @@ const productSchema = new Schema<IProductDocument>(
     inventoryStatus: { type: String, enum: ['verified', 'unverified'], default: 'unverified' },
     inventoryVerifiedAt: { type: Date },
     inventoryVerifiedBy: { type: String },
+    demoEligible: { type: Boolean, default: false, index: true },
+    demoStock: { type: Number, default: 0, min: 0, validate: Number.isInteger },
     rating: { type: Number, default: 0, min: 0, max: 5 },
     numReviews: { type: Number, default: 0, min: 0 },
     brand: { type: String, default: 'AURA', trim: true },

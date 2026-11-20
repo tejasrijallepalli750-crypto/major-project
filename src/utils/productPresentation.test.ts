@@ -5,10 +5,106 @@ import test from 'node:test';
 import { OLIST_CATEGORY_IMAGE_MAP } from '../data/olistCategoryImageMap';
 import {
   formatCategoryLabel,
+  getAvailablePurchaseStock,
+  getPurchaseUnavailableReason,
+  getCustomerProductBrand,
+  getCustomerProductDescription,
+  getCustomerProductFeatures,
+  getCustomerProductName,
   getOlistCategoryImage,
   getOlistCategoryPhotoPath,
   getProductImageSource,
 } from './productPresentation';
+
+test('purchase availability uses only the explicitly selected inventory source', () => {
+  assert.equal(getAvailablePurchaseStock({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: false,
+    demoEligible: true,
+    demoPurchasingAvailable: true,
+    demoStock: 5,
+  }), 0);
+  assert.equal(getAvailablePurchaseStock({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: false,
+    demoPurchasingAvailable: true,
+    demoStock: 5,
+  }), 0);
+  assert.equal(getAvailablePurchaseStock({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: true,
+    demoPurchasingAvailable: true,
+    demoStock: 3,
+  }), 3);
+  assert.equal(getAvailablePurchaseStock({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: true,
+    demoPurchasingAvailable: false,
+    demoStock: 3,
+  }), 0);
+  assert.equal(getAvailablePurchaseStock({ stock: 2, inventoryStatus: 'verified' }), 2);
+});
+
+test('purchase controls explain why unavailable inventory cannot be purchased', () => {
+  assert.match(getPurchaseUnavailableReason({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: false,
+  }) || '', /not selected for demonstration purchases/i);
+  assert.match(getPurchaseUnavailableReason({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: true,
+    demoPurchasingAvailable: false,
+    demoStock: 5,
+  }) || '', /Razorpay TEST setup/i);
+  assert.match(getPurchaseUnavailableReason({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: true,
+    demoPurchasingAvailable: true,
+    demoStock: 0,
+  }) || '', /no demonstration stock/i);
+  assert.match(getPurchaseUnavailableReason({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: false,
+  }) || '', /not verified.*disabled by the server/i);
+  assert.match(getPurchaseUnavailableReason({
+    stock: 20,
+    inventoryStatus: 'unverified',
+  }) || '', /server did not provide purchase eligibility/i);
+  assert.equal(getPurchaseUnavailableReason({
+    stock: 20,
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: true,
+    demoPurchasingAvailable: true,
+    demoStock: 2,
+  }), undefined);
+  assert.equal(getAvailablePurchaseStock({
+    stock: 10,
+    inventoryStatus: 'verified',
+    canPurchase: false,
+    purchaseUnavailableReason: 'Server says unavailable.',
+  }), 0);
+  assert.equal(getPurchaseUnavailableReason({
+    stock: 10,
+    inventoryStatus: 'verified',
+    canPurchase: false,
+    purchaseUnavailableReason: 'Server says unavailable.',
+  }), 'Server says unavailable.');
+});
 
 test('the centralized Olist image map covers all 73 source categories and uncategorized products', () => {
   const sourceCategories = OLIST_CATEGORY_IMAGE_MAP.map((definition) => definition.sourceCategory);
@@ -59,7 +155,7 @@ test('Olist category aliases resolve from source identifiers, translated slugs, 
   assert.equal(getOlistCategoryImage('auto').path, '/images/catalog-category-art/automotive.svg');
 });
 
-test('Olist display ignores an assigned per-product image and uses only its category mapping', () => {
+test('Olist products resolve through their existing category mapping and other images stay unchanged', () => {
   assert.equal(
     getProductImageSource('OLIST-0123456789abcdef0123456789abcdef', 'health_beauty', '/images/products/unrelated.jpg'),
     '/images/products/pexels-16378446.jpg',
@@ -80,13 +176,24 @@ test('only verified Pexels images are mapped and unapproved candidates retain il
   assert.equal(getOlistCategoryImage(undefined).path, '/images/catalog-category-art/general.svg');
 });
 
-test('Olist product image resolution uses approved category photos and preserves non-Olist images', () => {
+test('customer product text retains product details while removing source and image labels', () => {
+  const product = {
+    name: 'Olist Home Essentials product 44BE5793',
+    sku: 'OLIST-44BE5793',
+  };
+  assert.equal(getCustomerProductName(product), 'Home Essentials product 44BE5793');
+  assert.equal(getCustomerProductBrand('Olist Historical Catalogue'), '');
   assert.equal(
-    getProductImageSource('OLIST-0123456789abcdef0123456789abcdef', 'computers', '/images/products/unrelated.jpg'),
-    '/images/products/pexels-8534378.jpg',
+    getCustomerProductDescription('A catalogue display entry for an Olist product in Home Essentials. The representative category image is not an original Olist product photo. Its INR price is an estimate converted from historical BRL prices.'),
+    'Its INR price is an estimate converted from historical BRL prices.',
   );
-  assert.equal(
-    getProductImageSource('AURA-001', 'computers', '/images/products/aura-product.jpg'),
-    '/images/products/aura-product.jpg',
+  assert.deepEqual(
+    getCustomerProductFeatures([
+      'Olist historical catalogue',
+      'Representative category image; not an original Olist product photo',
+      'Generated display title based on translated category (home)',
+      'Historical BRL average converted to an INR estimate at 18.81 INR per BRL',
+    ]),
+    ['Historical BRL average converted to an INR estimate at 18.81 INR per BRL'],
   );
 });

@@ -6,8 +6,11 @@ import { ProductImage } from './ProductImage';
 import {
   formatCategoryLabel,
   getCategoryArtFamily,
+  getCustomerProductBrand,
+  getCustomerProductDescription,
+  getCustomerProductName,
+  getAvailablePurchaseStock,
   isEstimatedOlistPrice,
-  isInventoryVerified,
 } from '../utils/productPresentation';
 
 interface RecommendationsSectionProps {
@@ -26,7 +29,7 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
   const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [addedProductIds, setAddedProductIds] = useState<Record<string, boolean>>({});
   const canPurchase = (product: Product): boolean =>
-    isInventoryVerified(product.inventoryStatus) && product.stock > 0;
+    getAvailablePurchaseStock(product) > 0;
 
   const handleAddToCart = (e: React.MouseEvent, product: Product) => {
     e.stopPropagation();
@@ -104,7 +107,9 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
         {displayList.map((product, idx) => {
           const badge = getRecommendationBadge(product, idx);
           const isAdded = addedProductIds[product.id];
-
+          const productName = getCustomerProductName(product);
+          const productBrand = getCustomerProductBrand(product.brand);
+          const productDescription = getCustomerProductDescription(product.description);
           return (
             <div
               key={product.id}
@@ -138,15 +143,15 @@ export const RecommendationsSection: React.FC<RecommendationsSectionProps> = ({
                 <div>
                   <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium uppercase tracking-wider mb-1">
                     <span>{formatCategoryLabel(product.category)}</span>
-                    {product.brand && <span className="text-slate-600 font-semibold">{product.brand}</span>}
+                    {productBrand && <span className="text-slate-600 font-semibold">{productBrand}</span>}
                   </div>
 
                   <h3 className="text-sm font-bold text-slate-900 group-hover:text-slate-700 transition-colors line-clamp-1">
-                    {product.name}
+                    {productName}
                   </h3>
 
                   <p className="text-xs text-slate-500 line-clamp-2 mt-1 leading-relaxed">
-                    {product.description}
+                    {productDescription}
                   </p>
                 </div>
 

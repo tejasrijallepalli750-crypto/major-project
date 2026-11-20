@@ -1,6 +1,18 @@
-import { Product, User, Order, CartItem, Review, SecurityTestResult, ShippingAddress } from '../types';
+import {
+  DemoInventoryBulkResult,
+  Product,
+  User,
+  Order,
+  CartItem,
+  Review,
+  SecurityTestResult,
+  ShippingAddress,
+} from '../types';
 
-const BASE_URL = '/api';
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/, '');
+const BASE_URL = configuredApiBaseUrl
+  ? `${configuredApiBaseUrl.replace(/(?:\/api)+$/i, '')}/api`
+  : '/api';
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) {
@@ -187,6 +199,20 @@ export const api = {
     return data;
   },
 
+  async updateDemoInventory(
+    id: string,
+    inventory: { eligible: boolean; demoStock: number },
+  ): Promise<{ success: boolean; data: Product; message: string }> {
+    const res = await fetch(`${BASE_URL}/products/${encodeURIComponent(id)}/demo-inventory`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(inventory),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to save demonstration inventory');
+    return data;
+  },
+
   async deleteProduct(id: string): Promise<{ success: boolean; message: string }> {
     const res = await fetch(`${BASE_URL}/products/${id}`, {
       method: 'DELETE',
@@ -220,7 +246,7 @@ export const api = {
 
   async createOrder(orderData: {
     orderItems: { productId: string; quantity: number }[];
-    shippingAddress: ShippingAddress;
+    shippingAddress: ShippingAddress & { email: string };
     paymentMethod: Order['paymentMethod'];
   }, idempotencyKey: string): Promise<{ success: boolean; data: Order; message: string }> {
     const res = await fetch(`${BASE_URL}/orders`, {
@@ -239,6 +265,16 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Failed to fetch order history');
+    return data;
+  },
+
+  async removeOrderFromMyHistory(id: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE_URL}/orders/${encodeURIComponent(id)}/customer-history`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to remove order from your history');
     return data;
   },
 
@@ -271,14 +307,59 @@ export const api = {
     return data;
   },
 
+  async reconcileDemoInventory(): Promise<{
+    success: boolean;
+    data: { scanned: number; released: number; retained: number; skipped: boolean };
+  }> {
+    const res = await fetch(`${BASE_URL}/admin/demo-inventory/reconcile`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to reconcile demonstration reservations');
+    return data;
+  },
+
+  async bulkEnableDemoInventory(): Promise<{
+    success: boolean;
+    message: string;
+    data: DemoInventoryBulkResult;
+  }> {
+    const res = await fetch(`${BASE_URL}/admin/demo-inventory/bulk-enable`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Failed to bulk-enable demonstration inventory');
+    return data;
+  },
+
   // --- Payment Endpoints ---
   async getPaymentConfig(): Promise<{
     success: boolean;
     isConfigured: boolean;
+    demoModeEnabled?: boolean;
+    demoPurchasingAvailable?: boolean;
   }> {
     const res = await fetch(`${BASE_URL}/payment/config`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Unable to check payment availability');
+    return data;
+  },
+
+  async refreshOrderPaymentStatus(orderId: string): Promise<{
+    success: boolean;
+    state: 'retry-ready' | 'verification-pending' | 'paid' | 'expired' | 'recovery';
+    order: Order;
+    message: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/payment/refresh-order-status`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ orderId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to verify the previous payment');
     return data;
   },
 
@@ -301,6 +382,52 @@ export const api = {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Payment initiation failed');
+    return data;
+  },
+
+  async retryPaymentOrder(orderId: string): Promise<{
+    success: boolean;
+    data: {
+      orderId: string;
+      orderNumber: string;
+      razorpayOrderId: string;
+      amount: number;
+      currency: string;
+      keyId: string;
+      customer: { name: string; email: string; phone?: string };
+    };
+  }> {
+    const res = await fetch(`${BASE_URL}/payment/retry-order`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ orderId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Payment retry is unavailable');
+    return data;
+  },
+
+  async cancelOrder(orderId: string): Promise<{ success: boolean; data: Order; message: string }> {
+    const res = await fetch(`${BASE_URL}/payment/cancel-order`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ orderId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Order cancellation is unavailable');
+    return data;
+  },
+
+  async getOrderCancellationStatus(orderId: string): Promise<{
+    success: boolean;
+    canCancel: boolean;
+    message?: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/payment/cancellation-status/${encodeURIComponent(orderId)}`, {
+      headers: getAuthHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Unable to verify safe cancellation');
     return data;
   },
 

@@ -4,6 +4,7 @@ import path from 'path';
 import { db, getDatabaseErrorStatus } from '../db/database';
 import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { hasEligibleReviewOrder } from '../reviews/reviewRules';
+import { isDemoModeEnabled } from '../config/demoMode';
 import { z } from 'zod';
 
 const router = Router();
@@ -16,6 +17,13 @@ const inventoryBodySchema = z.object({
   stock: z.number().int().min(0).max(1000000),
   confirmPhysicalCount: z.literal(true),
 }).strict();
+const demoInventoryBodySchema = z.object({
+  eligible: z.boolean(),
+  demoStock: z.number().int().min(0).max(1000000),
+}).strict().refine(
+  ({ eligible, demoStock }) => !eligible || demoStock > 0,
+  { message: 'A positive demo quantity is required when demo purchasing is enabled.' },
+);
 
 const isLocalProductImage = (image: string): boolean => {
   if (!image.startsWith('/images/') || image.startsWith('//')) return false;
@@ -229,6 +237,36 @@ router.put('/:id/inventory', requireAuth, requireAdmin, async (req: Authenticate
   } catch (error) {
     console.error('[Products] Inventory update error:', error);
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to save verified inventory.' });
+  }
+});
+
+router.put('/:id/demo-inventory', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  if (!isDemoModeEnabled()) {
+    return res.status(503).json({ success: false, message: 'Demonstration inventory mode is disabled by the server.' });
+  }
+  const bodyResult = demoInventoryBodySchema.safeParse(req.body);
+  if (!bodyResult.success) {
+    return res.status(400).json({
+      success: false,
+      message: 'Provide an eligibility choice and a positive whole-number demo quantity when enabling demo purchases.',
+    });
+  }
+  try {
+    const updated = await db.updateDemoInventory(
+      req.params.id,
+      bodyResult.data.eligible,
+      bodyResult.data.demoStock,
+    );
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Product not found.' });
+    }
+    return res.json({ success: true, message: 'Demonstration inventory saved separately from physical stock.', data: updated });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'InventoryError') {
+      return res.status(409).json({ success: false, message: error.message });
+    }
+    console.error('[Products] Demo inventory update error:', error instanceof Error ? error.name : 'Unknown error.');
+    return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to save demonstration inventory.' });
   }
 });
 

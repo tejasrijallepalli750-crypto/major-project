@@ -3,10 +3,97 @@ import { once } from 'node:events';
 import test from 'node:test';
 import express from 'express';
 import { Order, Product, Review, User } from '../../src/types';
-import { db } from '../db/database';
+import { db, InventoryError, productFromDocument } from '../db/database';
+import { IProductDocument } from '../models/Product';
 import { generateToken } from '../middleware/auth';
 import { calculateReviewSummary } from '../reviews/reviewRules';
 import productRoutes from './productRoutes';
+
+test('database product mapping and list/detail APIs preserve the same purchase eligibility fields', async () => {
+  const environmentKeys = ['DEMO_MODE_ENABLED', 'NODE_ENV', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] as const;
+  const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
+  const originalFindProductById = db.findProductById;
+  const originalFindProducts = db.findProducts;
+  const document: IProductDocument = {
+    id: 'prod-purchase-eligibility-test',
+    name: 'Purchase Eligibility Test Product',
+    description: 'Test product',
+    price: 100,
+    category: 'Test',
+    image: '/images/products/test.jpg',
+    stock: 20,
+    sku: 'PURCHASE-ELIGIBILITY-TEST',
+    status: 'active',
+    inventoryMode: 'simulated-demo',
+    inventoryStatus: 'unverified',
+    demoEligible: true,
+    demoStock: 4,
+    rating: 0,
+    numReviews: 0,
+    brand: 'AURA',
+    features: [],
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  };
+  process.env.DEMO_MODE_ENABLED = 'true';
+  process.env.NODE_ENV = 'development';
+  process.env.RAZORPAY_KEY_ID = 'rzp_test_eligibility-mapping';
+  process.env.RAZORPAY_KEY_SECRET = 'purchase-eligibility-test-secret';
+  const product = productFromDocument(document);
+  db.findProductById = async (id) => id === product.id ? product : undefined;
+  db.findProducts = async () => ({ products: [product], total: 1, page: 1, totalPages: 1 });
+
+  const app = express();
+  app.use('/api/products', productRoutes);
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const baseUrl = `http://127.0.0.1:${address.port}/api/products`;
+    const listResponse = await fetch(`${baseUrl}?limit=1`);
+    const list = await listResponse.json() as { data: Product[] };
+    const detailResponse = await fetch(`${baseUrl}/${product.id}`);
+    const detail = await detailResponse.json() as { data: Product };
+
+    assert.equal(listResponse.status, 200);
+    assert.equal(detailResponse.status, 200);
+    for (const result of [list.data[0], detail.data]) {
+      assert.equal(result.demoEligible, true);
+      assert.equal(result.demoModeEnabled, true);
+      assert.equal(result.demoPurchasingAvailable, true);
+      assert.equal(result.demoStock, 4);
+      assert.equal(result.canPurchase, true);
+      assert.equal(result.purchaseUnavailableReason, null);
+    }
+
+    process.env.DEMO_MODE_ENABLED = 'false';
+    const modeDisabled = productFromDocument(document);
+    assert.equal(modeDisabled.demoEligible, true);
+    assert.equal(modeDisabled.demoStock, 4);
+    assert.equal(modeDisabled.demoModeEnabled, false);
+    assert.equal(modeDisabled.canPurchase, false);
+    assert.match(modeDisabled.purchaseUnavailableReason || '', /demonstration purchasing is disabled/i);
+
+    process.env.DEMO_MODE_ENABLED = 'true';
+    process.env.RAZORPAY_KEY_ID = 'rzp_live_not-allowed';
+    const liveCredentials = productFromDocument(document);
+    assert.equal(liveCredentials.demoPurchasingAvailable, false);
+    assert.equal(liveCredentials.canPurchase, false);
+    assert.match(liveCredentials.purchaseUnavailableReason || '', /Razorpay TEST setup/i);
+  } finally {
+    server.close();
+    await once(server, 'close');
+    db.findProductById = originalFindProductById;
+    db.findProducts = originalFindProducts;
+    for (const key of environmentKeys) {
+      const value = originalEnvironment.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
 
 test('product reviews are public and restricted to eligible verified purchasers', async () => {
   const originalSecret = process.env.JWT_SECRET;
@@ -216,6 +303,121 @@ test('only admins can record a physically confirmed inventory quantity', async (
     db.updateProductInventory = originalUpdateProductInventory;
     if (originalSecret === undefined) delete process.env.JWT_SECRET;
     else process.env.JWT_SECRET = originalSecret;
+  }
+});
+
+test('demo inventory controls are admin-only and never update physical stock', async () => {
+  const environmentKeys = ['JWT_SECRET', 'DEMO_MODE_ENABLED'] as const;
+  const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
+  const originalFindUserById = db.findUserById;
+  const originalUpdateDemoInventory = db.updateDemoInventory;
+  const admin: User = {
+    id: 'usr-demo-inventory-admin-test',
+    name: 'Demo Inventory Admin',
+    email: 'demo-inventory-admin@example.invalid',
+    role: 'admin',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+  const customer: User = { ...admin, id: 'usr-demo-inventory-customer-test', role: 'customer' };
+  const product: Product = {
+    id: 'prod-demo-inventory-route-test',
+    name: 'Demo Inventory Test Product',
+    description: 'Test product',
+    price: 100,
+    category: 'Test',
+    image: '/images/products/test.jpg',
+    stock: 20,
+    sku: 'DEMO-INVENTORY-TEST',
+    status: 'active',
+    inventoryMode: 'simulated-demo',
+    inventoryStatus: 'unverified',
+    demoModeEnabled: true,
+    demoEligible: false,
+    demoStock: 0,
+    rating: 0,
+    numReviews: 0,
+    brand: 'AURA',
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
+  };
+  let updateCalls = 0;
+  process.env.JWT_SECRET = 'demo-inventory-route-test-secret-at-least-32-characters';
+  process.env.DEMO_MODE_ENABLED = 'true';
+  db.findUserById = async (id) => id === admin.id ? admin : id === customer.id ? customer : undefined;
+  db.updateDemoInventory = async (id, eligible, demoStock) => {
+    updateCalls += 1;
+    assert.equal(id, product.id);
+    return { ...product, demoEligible: eligible, demoStock: eligible ? demoStock : 0 };
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use('/api/products', productRoutes);
+  const server = app.listen(0, '127.0.0.1');
+
+  try {
+    await once(server, 'listening');
+    const address = server.address();
+    assert.ok(address && typeof address !== 'string');
+    const url = `http://127.0.0.1:${address.port}/api/products/${product.id}/demo-inventory`;
+    const adminProductsUrl = `http://127.0.0.1:${address.port}/api/products/admin/all`;
+    const adminToken = generateToken(admin);
+    const customerToken = generateToken(customer);
+    const send = (body: unknown, token: string) => fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+
+    const unauthenticated = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eligible: true, demoStock: 7 }),
+    });
+    assert.equal(unauthenticated.status, 401);
+    const unauthenticatedCatalog = await fetch(adminProductsUrl);
+    assert.equal(unauthenticatedCatalog.status, 401);
+    const customerCatalog = await fetch(adminProductsUrl, {
+      headers: { Authorization: `Bearer ${customerToken}` },
+    });
+    assert.equal(customerCatalog.status, 403);
+    assert.equal((await send({ eligible: true, demoStock: 7 }, customerToken)).status, 403);
+    assert.equal(updateCalls, 0);
+
+    assert.equal((await send({ eligible: true, demoStock: 0 }, adminToken)).status, 400);
+    assert.equal(updateCalls, 0);
+
+    const saved = await send({ eligible: true, demoStock: 7 }, adminToken);
+    assert.equal(saved.status, 200);
+    const result = await saved.json() as { data: Product };
+    assert.equal(result.data.demoEligible, true);
+    assert.equal(result.data.demoStock, 7);
+    assert.equal(result.data.stock, 20);
+    assert.equal(result.data.inventoryStatus, 'unverified');
+    assert.equal(updateCalls, 1);
+
+    db.updateDemoInventory = async () => {
+      throw new InventoryError('Demo stock cannot be changed while a demo order is reserving this product.');
+    };
+    const blockedDisable = await send({ eligible: false, demoStock: 0 }, adminToken);
+    assert.equal(blockedDisable.status, 409);
+    const blockedResult = await blockedDisable.json() as { message: string };
+    assert.match(blockedResult.message, /reserving this product/i);
+
+    process.env.DEMO_MODE_ENABLED = 'false';
+    assert.equal((await send({ eligible: true, demoStock: 7 }, adminToken)).status, 503);
+    assert.equal(updateCalls, 1);
+  } finally {
+    server.close();
+    await once(server, 'close');
+    db.findUserById = originalFindUserById;
+    db.updateDemoInventory = originalUpdateDemoInventory;
+    for (const key of environmentKeys) {
+      const value = originalEnvironment.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 });
 

@@ -1,7 +1,15 @@
 import React from 'react';
 import { ArrowRight, PackageCheck } from 'lucide-react';
 import { Product } from '../types';
-import { formatCategoryLabel, isEstimatedOlistPrice, isInventoryVerified } from '../utils/productPresentation';
+import {
+  formatCategoryLabel,
+  getCustomerProductBrand,
+  getCustomerProductDescription,
+  getCustomerProductName,
+  getAvailablePurchaseStock,
+  isDemoPurchase,
+  isEstimatedOlistPrice,
+} from '../utils/productPresentation';
 import { ProductImage } from './ProductImage';
 
 interface SpotlightWideBannerProps {
@@ -17,13 +25,13 @@ export const SpotlightWideBanner: React.FC<SpotlightWideBannerProps> = ({
     <div className="grid overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-r from-amber-50 via-rose-50 to-orange-100 shadow-xl md:grid-cols-2">
       <div className="flex flex-col justify-center p-6 sm:p-10">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-800">
-          {formatCategoryLabel(product.category)}{product.brand ? ` · ${product.brand}` : ''}
+          {formatCategoryLabel(product.category)}{getCustomerProductBrand(product.brand) ? ` · ${getCustomerProductBrand(product.brand)}` : ''}
         </p>
         <h2 className="mt-3 text-2xl font-extrabold leading-tight tracking-tight text-slate-900 sm:text-4xl">
-          {product.name}
+          {getCustomerProductName(product)}
         </h2>
         <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-700">
-          {product.description}
+          {getCustomerProductDescription(product.description)}
         </p>
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <span className="text-2xl font-black text-amber-900">
@@ -31,9 +39,9 @@ export const SpotlightWideBanner: React.FC<SpotlightWideBannerProps> = ({
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
             <PackageCheck className="h-4 w-4 text-emerald-700" />
-            {!isInventoryVerified(product.inventoryStatus)
-              ? 'Inventory not verified'
-              : product.stock > 0 ? 'In stock' : 'Currently out of stock'}
+            {isDemoPurchase(product)
+              ? getAvailablePurchaseStock(product) > 0 ? 'Demo stock · TEST checkout' : 'Demo stock not available'
+              : getAvailablePurchaseStock(product) > 0 ? 'In stock' : null}
           </span>
         </div>
         {isEstimatedOlistPrice(product.sku) && (
@@ -48,7 +56,7 @@ export const SpotlightWideBanner: React.FC<SpotlightWideBannerProps> = ({
       </div>
       <button
         onClick={() => onSelectProduct(product.id)}
-        aria-label={`View ${product.name}`}
+        aria-label={`View ${getCustomerProductName(product)}`}
         className="group relative min-h-64 cursor-pointer overflow-hidden bg-white/60 md:min-h-full"
       >
         <ProductImage

@@ -76,7 +76,8 @@ test('ABO sample stays outside Olist, cart, checkout, and order flows', () => {
 
   const samplePage = fs.readFileSync(path.join(projectRoot, 'src/pages/AboSampleCatalogPage.tsx'), 'utf8');
   assert.doesNotMatch(samplePage, /ProductCard|useCart|useWishlist|createOrder|Payment|\/api\//);
-  assert.match(samplePage, /cannot be added to a\s+cart/);
+  assert.match(samplePage, /cannot be purchased from this page/);
+  assert.doesNotMatch(samplePage, /Amazon Berkeley Objects|Olist dataset|Representative category image|Sample only|Main image ID|Source listing/i);
 
   const app = fs.readFileSync(path.join(projectRoot, 'src/App.tsx'), 'utf8');
   assert.match(app, /currentView === 'abo-sample' && <AboSampleCatalogPage \/>/);
@@ -85,4 +86,16 @@ test('ABO sample stays outside Olist, cart, checkout, and order flows', () => {
 
   const orderRoutes = fs.readFileSync(path.join(projectRoot, 'server/routes/orderRoutes.ts'), 'utf8');
   assert.doesNotMatch(orderRoutes, /aboSampleProducts|AboSampleCatalogPage/);
+});
+
+test('navigation omits More products while keeping the existing destinations', () => {
+  const navbar = fs.readFileSync(path.join(projectRoot, 'src/components/Navbar.tsx'), 'utf8');
+  assert.doesNotMatch(navbar, /More products|navigate\('abo-sample'\)/);
+  assert.match(navbar, /navigate\('home'\)/);
+  assert.match(navbar, /navigate\('catalog'\)/);
+  assert.match(navbar, /navigate\('wishlist'\)/);
+  assert.match(navbar, /navigate\('orders'\)/);
+  assert.match(navbar, /navigate\('profile'\)/);
+  assert.match(navbar, /navigate\('admin'\)/);
+  assert.match(navbar, /setIsCartDrawerOpen\(true\)/);
 });

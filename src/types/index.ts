@@ -30,12 +30,35 @@ export interface Product {
   inventoryMode?: 'simulated-demo';
   inventoryStatus?: 'verified' | 'unverified';
   inventoryVerifiedAt?: string;
+  demoModeEnabled?: boolean;
+  demoPurchasingAvailable?: boolean;
+  demoEligible?: boolean;
+  demoStock?: number;
+  canPurchase?: boolean;
+  purchaseUnavailableReason?: string | null;
   rating: number;
   numReviews: number;
   brand: string;
   features?: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface DemoInventoryBulkProductIssue {
+  productId: string;
+  name: string;
+  reason: string;
+  activeReservedQuantity?: number;
+}
+
+export interface DemoInventoryBulkResult {
+  totalProducts: number;
+  processedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  skippedProducts: DemoInventoryBulkProductIssue[];
+  failedProducts: DemoInventoryBulkProductIssue[];
 }
 
 export interface Review {
@@ -59,11 +82,17 @@ export interface CartItem {
   sku: string;
   inventoryMode?: 'simulated-demo';
   inventoryStatus?: 'verified' | 'unverified';
+  demoModeEnabled?: boolean;
+  demoPurchasingAvailable?: boolean;
+  demoEligible?: boolean;
+  demoStock?: number;
+  purchaseMode?: 'physical' | 'demo';
 }
 
 export interface ShippingAddress {
   fullName: string;
   phone: string;
+  email?: string;
   street: string;
   city: string;
   district?: string;
@@ -82,6 +111,7 @@ export interface OrderItem {
   category?: string;
   inventoryMode?: 'simulated-demo';
   inventoryStatus?: 'verified' | 'unverified';
+  purchaseMode?: 'physical' | 'demo';
 }
 
 export interface PaymentResult {
@@ -117,6 +147,10 @@ export interface Order {
   orderItems: OrderItem[];
   shippingAddress: ShippingAddress;
   razorpayOrderId?: string;
+  purchaseMode?: 'physical' | 'demo';
+  demoReservationStatus?: 'reserved' | 'consumed' | 'released';
+  demoReservationExpiresAt?: string;
+  demoGatewayOrderExpiresAt?: string;
   paymentMethod: 'Razorpay' | 'Local Demo' | 'Card' | 'UPI' | 'NetBanking' | 'Cash on Delivery';
   paymentResult?: PaymentResult;
   demoPaymentAttempts?: DemoPaymentAttempt[];

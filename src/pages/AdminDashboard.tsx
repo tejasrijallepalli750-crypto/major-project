@@ -33,7 +33,7 @@ interface AdminDashboardProps {
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'orders' | 'dataset'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'products' | 'demo' | 'orders' | 'dataset'>('overview');
   const [stats, setStats] = useState<any | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [productSearch, setProductSearch] = useState('');
@@ -41,6 +41,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [productTotal, setProductTotal] = useState(0);
   const [productTotalPages, setProductTotalPages] = useState(1);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoaded, setOrdersLoaded] = useState(false);
+  const [demoModeEnabled, setDemoModeEnabled] = useState(false);
+  const [demoModeStatus, setDemoModeStatus] = useState<'unknown' | 'enabled' | 'disabled'>('unknown');
+  const [demoPurchasingAvailable, setDemoPurchasingAvailable] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
@@ -62,6 +66,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
   const [inventoryStock, setInventoryStock] = useState('');
   const [inventoryConfirmed, setInventoryConfirmed] = useState(false);
   const [isSavingInventory, setIsSavingInventory] = useState(false);
+  const [demoProduct, setDemoProduct] = useState<Product | null>(null);
+  const [demoEligible, setDemoEligible] = useState(false);
+  const [demoStock, setDemoStock] = useState('');
+  const [isSavingDemoInventory, setIsSavingDemoInventory] = useState(false);
+  const [isReconcilingDemo, setIsReconcilingDemo] = useState(false);
   const [productForm, setProductForm] = useState({
     name: '',
     description: '',
@@ -75,8 +84,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
   const fetchData = async (): Promise<string | null> => {
     setIsLoading(true);
+    setOrdersLoaded(false);
     try {
-      const [statsRes, prodRes, ordersRes, datasetRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.getAdminStats(),
         api.getProducts({
           search: productSearch || undefined,
@@ -86,18 +96,63 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         }),
         api.getAllOrders(),
         api.getDatasetStatus(),
+        api.getPaymentConfig(),
       ]);
-      setStats(statsRes.data);
-      setProducts(prodRes.data);
-      setProductTotal(prodRes.total);
-      setProductTotalPages(prodRes.totalPages);
-      setOrders(ordersRes.data);
-      if (datasetRes && datasetRes.success) {
-        setDatasetInfo(datasetRes);
+
+      const errors: string[] = [];
+      const getErrorMessage = (reason: unknown, fallback: string) =>
+        reason instanceof Error ? reason.message : fallback;
+
+      if (results[0].status === 'fulfilled') {
+        setStats(results[0].value.data);
+      } else {
+        errors.push(`Store statistics: ${getErrorMessage(results[0].reason, 'request failed')}`);
+      }
+
+      if (results[1].status === 'fulfilled') {
+        setProducts(results[1].value.data);
+        setProductTotal(results[1].value.total);
+        setProductTotalPages(results[1].value.totalPages);
+        setProductPage(results[1].value.page);
+      } else {
+        errors.push(`Product catalog: ${getErrorMessage(results[1].reason, 'request failed')}`);
+      }
+
+      if (results[2].status === 'fulfilled') {
+        setOrders(results[2].value.data);
+        setOrdersLoaded(true);
+      } else {
+        errors.push(`Orders: ${getErrorMessage(results[2].reason, 'request failed')}`);
+      }
+
+      if (results[3].status === 'fulfilled') {
+        setDatasetInfo(results[3].value);
+      } else {
+        errors.push(`Dataset status: ${getErrorMessage(results[3].reason, 'request failed')}`);
+      }
+
+      if (results[4].status === 'fulfilled') {
+        const paymentConfig = results[4].value;
+        setDemoModeEnabled(paymentConfig.demoModeEnabled === true);
+        setDemoModeStatus(typeof paymentConfig.demoModeEnabled === 'boolean'
+          ? paymentConfig.demoModeEnabled ? 'enabled' : 'disabled'
+          : 'unknown');
+        setDemoPurchasingAvailable(paymentConfig.demoPurchasingAvailable === true);
+      } else {
+        setDemoModeEnabled(false);
+        setDemoModeStatus('unknown');
+        setDemoPurchasingAvailable(false);
+        errors.push(`Demo-mode configuration: ${getErrorMessage(results[4].reason, 'request failed')}`);
+      }
+
+      if (errors.length > 0) {
+        const errorMessage = `Some administration data could not be loaded. ${errors.join('. ')}`;
+        setMessage({ text: errorMessage, type: 'error' });
+        return errorMessage;
       }
       return null;
     } catch (err: unknown) {
-      console.error('Failed to load admin stats', err);
+      console.error('Failed to load administration data', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to load administration data';
       setMessage({ text: errorMessage, type: 'error' });
       return errorMessage;
@@ -308,6 +363,89 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
     }
   };
 
+  const handleOpenDemoInventory = (product: Product) => {
+    setDemoProduct(product);
+    setDemoEligible(product.demoEligible === true);
+    setDemoStock(product.demoStock ? String(product.demoStock) : '');
+  };
+
+  const handleSaveDemoInventory = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!demoProduct) return;
+    const stock = demoEligible ? Number(demoStock) : 0;
+    if (!Number.isSafeInteger(stock) || stock < 0 || stock > 1000000 || (demoEligible && stock === 0)) {
+      setMessage({
+        text: demoEligible
+          ? 'Enter a positive whole-number demo quantity from 1 to 1,000,000 when enabling demo purchases.'
+          : 'Demo quantity must be a whole number from 0 to 1,000,000.',
+        type: 'error',
+      });
+      return;
+    }
+
+    if (!demoEligible) {
+      if (!ordersLoaded) {
+        setMessage({
+          text: 'Active demo reservations could not be checked. Refresh administration data before disabling demo purchasing.',
+          type: 'error',
+        });
+        return;
+      }
+      const activeReservations = orders.filter((order) =>
+        (order.purchaseMode === 'demo' || order.orderItems.some((item) => item.purchaseMode === 'demo'))
+        && order.demoReservationStatus === 'reserved'
+        && order.status === 'Pending'
+        && order.orderItems.some((item) => item.product === demoProduct.id),
+      ).length;
+      if (activeReservations > 0 && !window.confirm(
+        `${activeReservations} active demo reservation(s) exist for this product. The server will protect these reservations and may block the change until they are resolved. Continue?`,
+      )) {
+        return;
+      }
+    }
+
+    setIsSavingDemoInventory(true);
+    try {
+      await api.updateDemoInventory(demoProduct.id, { eligible: demoEligible, demoStock: stock });
+      setMessage({
+        text: demoEligible
+          ? `Demonstration quantity for "${demoProduct.name}" was saved separately from physical stock.`
+          : `Demonstration purchasing was disabled for "${demoProduct.name}".`,
+        type: 'success',
+      });
+      setDemoProduct(null);
+      await fetchData();
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : 'Failed to save demonstration inventory.',
+        type: 'error',
+      });
+    } finally {
+      setIsSavingDemoInventory(false);
+    }
+  };
+
+  const handleReconcileDemoReservations = async () => {
+    setIsReconcilingDemo(true);
+    try {
+      const { data } = await api.reconcileDemoInventory();
+      setMessage({
+        text: data.skipped
+          ? 'Reconciliation was skipped because demo mode or Razorpay TEST credentials are unavailable.'
+          : `Expired demo reservations checked: ${data.scanned}; released: ${data.released}; retained for safety: ${data.retained}.`,
+        type: data.retained > 0 ? 'error' : 'success',
+      });
+      await fetchData();
+    } catch (error) {
+      setMessage({
+        text: error instanceof Error ? error.message : 'Failed to reconcile demo reservations.',
+        type: 'error',
+      });
+    } finally {
+      setIsReconcilingDemo(false);
+    }
+  };
+
   const handleToggleProductStatus = async (product: Product) => {
     const nextStatus = product.status === 'active' ? 'inactive' : 'active';
     const action = nextStatus === 'inactive' ? 'deactivate' : 'reactivate';
@@ -397,6 +535,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         </div>
       )}
 
+      {demoModeStatus !== 'enabled' ? (
+        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-900">
+          {demoModeStatus === 'unknown'
+            ? 'The application server did not report its demo-mode status. Restart it with the current project code before managing demo inventory.'
+            : 'Demo inventory management is disabled. In a non-production environment, set DEMO_MODE_ENABLED=true and restart the server. Production always blocks demo purchasing.'}
+        </div>
+      ) : !demoPurchasingAvailable ? (
+        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-900">
+          Demo inventory management is enabled, but Razorpay TEST checkout is not ready. Demo purchases remain blocked until valid TEST credentials are configured.
+        </div>
+      ) : null}
+
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2 text-xs font-semibold overflow-x-auto">
         <button
@@ -428,6 +578,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
           }`}
         >
           Orders &amp; Fulfillment ({orders.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('demo')}
+          className={`px-4 py-2 rounded-lg cursor-pointer transition-colors whitespace-nowrap ${
+            activeTab === 'demo'
+              ? 'bg-violet-800 text-white'
+              : 'text-violet-800 hover:text-violet-950 hover:bg-violet-50'
+          }`}
+        >
+          Demo Inventory <span className="text-[10px]">· TEST only</span>
         </button>
         <button
           onClick={() => setActiveTab('dataset')}
@@ -671,6 +831,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                               <button type="button" onClick={() => handleOpenInventory(p)} aria-label={`Verify inventory for ${p.name}`} className="rounded-md p-1.5 text-amber-700 hover:bg-amber-50">
                                 <Package className="h-4 w-4" />
                               </button>
+                              {demoModeEnabled && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDemoInventory(p)}
+                                  aria-label={`Manage demonstration stock for ${p.name}`}
+                                  className="rounded-md px-2 py-1 text-[10px] font-bold text-violet-800 hover:bg-violet-50"
+                                >
+                                  DEMO
+                                </button>
+                              )}
                               <button type="button" onClick={() => handleOpenEditProduct(p)} aria-label={`Edit ${p.name}`} className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100">
                                 <Edit2 className="h-4 w-4" />
                               </button>
@@ -709,12 +879,181 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
             </div>
           )}
 
+          {activeTab === 'demo' && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Demo Inventory</h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Select a small set of products and manage separate Razorpay TEST quantities. Physical inventory is not changed or verified.
+                </p>
+              </div>
+              <div className="rounded-xl border border-violet-200 bg-violet-50 p-4 text-xs leading-relaxed text-violet-900">
+                {demoModeStatus === 'enabled'
+                  ? 'Demo quantities are separate from physical stock and are never treated as physically verified.'
+                  : demoModeStatus === 'disabled'
+                    ? 'Demo mode is disabled by the server. Inventory is read-only until it is enabled in a non-production environment.'
+                    : 'The server has not confirmed demo mode. Inventory controls remain read-only until server configuration is available.'}
+                {' '}Select only a small set of products for Razorpay TEST demonstrations.
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => void fetchProductPage(productSearch, productPage)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Refresh inventory
+                </button>
+              </div>
+              <form onSubmit={handleProductSearch} className="flex gap-2">
+                <label htmlFor="demo-product-search" className="sr-only">Search products for demo inventory</label>
+                <input
+                  id="demo-product-search"
+                  type="search"
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Search products by name or SKU"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs"
+                />
+                <button type="submit" className="inline-flex items-center gap-1.5 rounded-xl bg-violet-800 px-4 py-2 text-xs font-semibold text-white">
+                  <Search className="h-4 w-4" />
+                  Search
+                </button>
+              </form>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                <table className="w-full text-left text-xs">
+                  <thead className="border-b bg-slate-50 text-[10px] uppercase tracking-wider text-slate-600">
+                    <tr>
+                      <th className="p-4">Product</th>
+                      <th className="p-4">Product ID</th>
+                      <th className="p-4">Category</th>
+                      <th className="p-4">Price</th>
+                      <th className="p-4">Eligibility</th>
+                      <th className="p-4">Demo stock</th>
+                      <th className="p-4">Demo purchasing</th>
+                      <th className="p-4">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {products.map((product) => (
+                      <tr key={product.id}>
+                        <td className="p-4">
+                          <div className="flex min-w-52 items-center gap-3">
+                            <img
+                              src={product.image}
+                              alt=""
+                              loading="lazy"
+                              className="h-12 w-12 shrink-0 rounded-lg border border-slate-100 object-cover"
+                            />
+                            <div>
+                              <p className="font-semibold text-slate-900">{product.name}</p>
+                              <p className="mt-1 font-mono text-[10px] text-slate-500">{product.sku}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="max-w-48 break-all p-4 font-mono text-[10px] text-slate-500">{product.id}</td>
+                        <td className="p-4 text-slate-600">{product.category}</td>
+                        <td className="whitespace-nowrap p-4 text-slate-700">₹{product.price.toLocaleString('en-IN')}</td>
+                        <td className="p-4">
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                            product.demoEligible ? 'bg-violet-100 text-violet-800' : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {product.demoEligible ? 'Eligible' : 'Not eligible'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className="font-semibold text-violet-800">{product.demoStock || 0}</span>
+                        </td>
+                        <td className="p-4">
+                          {(() => {
+                            const available = demoModeEnabled
+                              && demoPurchasingAvailable
+                              && product.demoPurchasingAvailable === true
+                              && product.status === 'active'
+                              && product.demoEligible === true
+                              && Number.isSafeInteger(product.demoStock)
+                              && (product.demoStock || 0) > 0;
+                            const reason = !demoModeEnabled
+                              ? 'Demo mode disabled'
+                              : !demoPurchasingAvailable || product.demoPurchasingAvailable !== true
+                                ? 'Razorpay TEST unavailable'
+                                : product.status !== 'active'
+                                  ? 'Product inactive'
+                                  : !product.demoEligible
+                                    ? 'Not selected'
+                                    : (product.demoStock || 0) <= 0
+                                      ? 'No demo stock'
+                                      : 'Available to customers';
+                            return (
+                              <span className={`whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold ${
+                                available ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                              }`}>
+                                {reason}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td className="p-4">
+                          <button
+                            type="button"
+                            disabled={!demoModeEnabled}
+                            onClick={() => handleOpenDemoInventory(product)}
+                            title={!demoModeEnabled ? 'Enable demo mode on the server to manage demo inventory.' : undefined}
+                            className="whitespace-nowrap rounded-lg bg-violet-800 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-violet-900 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            Manage demo stock
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {products.length === 0 && (
+                      <tr><td className="p-5 text-center text-slate-500" colSpan={8}>No products match this search.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+                  <span>{productTotal.toLocaleString('en-IN')} products · page {productPage} of {productTotalPages}</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={productPage <= 1}
+                      onClick={() => { const page = productPage - 1; setProductPage(page); void fetchProductPage(productSearch, page); }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={productPage >= productTotalPages}
+                      onClick={() => { const page = productPage + 1; setProductPage(page); void fetchProductPage(productSearch, page); }}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TAB 3: ORDERS MANAGEMENT */}
           {activeTab === 'orders' && (
             <div className="space-y-6">
-              <p className="text-xs text-slate-500">
-                Manage customer orders, view gateway verification hashes, and advance fulfillment statuses.
-              </p>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-slate-500">
+                  Manage customer orders, review payment verification, and advance fulfillment statuses.
+                </p>
+                {demoModeEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => void handleReconcileDemoReservations()}
+                    disabled={isReconcilingDemo}
+                    className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-[11px] font-semibold text-violet-900 disabled:opacity-50"
+                  >
+                    {isReconcilingDemo ? 'Reconciling…' : 'Reconcile expired demo reservations'}
+                  </button>
+                )}
+              </div>
 
               <div className="space-y-4">
                 {orders.map((order) => (
@@ -733,10 +1072,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                           >
                             {order.isPaid ? 'PAID (Razorpay Verified)' : 'PENDING PAYMENT'}
                           </span>
+                          {order.purchaseMode === 'demo' && (
+                            <span className="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-800">
+                              DEMO · TEST ONLY
+                            </span>
+                          )}
                         </div>
                         <p className="text-[11px] text-slate-400 mt-0.5">
                           Customer: {order.user.name} ({order.user.email}) · Placed: {new Date(order.createdAt).toLocaleString('en-IN')}
                         </p>
+                        {order.purchaseMode === 'demo' && order.demoReservationStatus === 'reserved' && order.demoReservationExpiresAt && (
+                          <p className="mt-1 text-[10px] text-violet-700">
+                            Demo stock reservation expires {new Date(order.demoReservationExpiresAt).toLocaleString('en-IN')}
+                          </p>
+                        )}
                       </div>
 
                       {/* Fulfillment Status Control */}
@@ -805,6 +1154,64 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                         </span>
                       </div>
                     </div>
+                    <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                        Inspect transaction and delivery details
+                      </summary>
+                      <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-200 pt-3 text-[11px] sm:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                          <p className="font-semibold text-slate-500">Customer</p>
+                          <p className="break-words text-slate-800">{order.user.name}</p>
+                          <p className="break-words text-slate-700">{order.user.email}</p>
+                          <p className="text-slate-700">Phone: {order.user.phone || 'Not provided'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-500">Delivery contact</p>
+                          <p className="break-words text-slate-800">{order.shippingAddress.fullName}</p>
+                          <p className="break-words text-slate-700">{order.shippingAddress.email || order.user.email}</p>
+                          <p className="text-slate-700">Phone: {order.shippingAddress.phone}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-500">Complete delivery address</p>
+                          <p className="break-words text-slate-800">
+                            {[
+                              order.shippingAddress.street,
+                              order.shippingAddress.district,
+                              order.shippingAddress.city,
+                              order.shippingAddress.state,
+                              order.shippingAddress.postalCode,
+                              order.shippingAddress.country,
+                            ].filter(Boolean).join(', ')}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-500">Order</p>
+                          <p className="break-all text-slate-800">ID: {order.id}</p>
+                          <p className="text-slate-700">Status: {order.status}</p>
+                          <p className="text-slate-700">Placed: {new Date(order.createdAt).toLocaleString('en-IN')}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-500">Payment</p>
+                          <p className="text-slate-800">Method: {order.paymentMethod}</p>
+                          <p className="text-slate-700">
+                            Status: {order.paymentResult?.status || (order.isPaid ? 'captured' : 'pending')}
+                          </p>
+                          <p className="text-slate-700">
+                            Amount: ₹{(order.paymentResult?.amount ?? order.totalPrice).toLocaleString('en-IN', { minimumFractionDigits: 2 })} {order.paymentResult?.currency || 'INR'}
+                          </p>
+                          <p className="text-slate-700">
+                            Payment date / last update: {order.paidAt || order.paymentResult?.verifiedAt
+                              ? new Date(order.paidAt || order.paymentResult?.verifiedAt || '').toLocaleString('en-IN')
+                              : 'Not paid'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-500">Razorpay references</p>
+                          <p className="break-all text-slate-700">Order ID: {order.razorpayOrderId || order.paymentResult?.razorpay_order_id || 'Not available'}</p>
+                          <p className="break-all text-slate-700">Payment ID: {order.paymentResult?.razorpay_payment_id || 'Not available'}</p>
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 ))}
               </div>
@@ -1174,7 +1581,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                 <input
                   id="verified-stock"
                   type="number"
-                  min={0}
+                  min={demoEligible ? 1 : 0}
                   max={1000000}
                   step={1}
                   required
@@ -1202,6 +1609,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                   className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSavingInventory ? 'Saving…' : 'Save Verified Count'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {demoProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
+          <div onClick={() => setDemoProduct(null)} className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs" />
+          <div className="relative z-10 w-full max-w-md space-y-4 rounded-2xl border border-violet-200 bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Manage Demonstration Inventory</h3>
+                <p className="mt-1 text-xs text-slate-500">{demoProduct.name}</p>
+              </div>
+              <button type="button" onClick={() => setDemoProduct(null)} aria-label="Close demo inventory dialog" className="p-1 text-slate-400 hover:text-slate-700">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveDemoInventory} className="space-y-4">
+              <p className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs leading-relaxed text-violet-900">
+                This separate quantity is for Razorpay TEST demonstrations only. It never changes or verifies physical stock.
+              </p>
+              <label className="flex items-start gap-2 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={demoEligible}
+                  onChange={(event) => setDemoEligible(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>Allow this product in the demonstration catalog</span>
+              </label>
+              <div>
+                <label htmlFor="demo-stock" className="mb-1 block text-xs font-semibold text-slate-700">
+                  Separate demo quantity
+                </label>
+                <input
+                  id="demo-stock"
+                  type="number"
+                  min={demoEligible ? 1 : 0}
+                  max={1000000}
+                  step={1}
+                  required
+                  disabled={!demoEligible}
+                  value={demoStock}
+                  onChange={(event) => setDemoStock(event.target.value)}
+                  className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-xs disabled:opacity-50"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setDemoProduct(null)} className="rounded-lg px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingDemoInventory}
+                  className="rounded-lg bg-violet-800 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-900 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isSavingDemoInventory ? 'Saving…' : 'Save changes'}
                 </button>
               </div>
             </form>

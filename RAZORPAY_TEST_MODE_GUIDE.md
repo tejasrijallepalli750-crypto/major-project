@@ -4,12 +4,12 @@ This is a manual procedure only. No transaction or webhook was triggered while p
 
 ## Safety prerequisites
 
-1. Use a staging deployment connected to a dedicated non-production MongoDB database. Do not point the test deployment at the live AURA database: checkout creates orders and reserves stock, while server startup can create an admin, deactivate some products, and seed missing catalog entries.
-2. Confirm staging uses `NODE_ENV=production` so the development-only Local Demo endpoint is unavailable.
-3. Use only a Razorpay Test Mode key ID beginning with `rzp_test_` and its matching key secret. The key secret must remain server-side.
-4. Use a test customer account and non-sensitive test contact/address details. Do not use a customer's real personal information.
-5. Before checkout, use only a genuine product with a physically verified available-to-sell quantity. Do not mark invented/demo stock as verified. If no suitable product is available, stop rather than bypassing inventory validation.
-6. To test webhooks, configure a publicly reachable HTTPS staging endpoint. Test webhooks cannot be delivered directly to localhost.
+1. Use a dedicated non-production MongoDB database. Do not point a test deployment at the live AURA database: checkout creates orders and reserves inventory, while server startup can create an admin, deactivate some products, and seed missing catalog entries.
+2. For a real-inventory Test Mode check, use a non-production staging deployment and a product with physically verified available-to-sell stock. Do not mark invented/demo stock as verified.
+3. The separate demonstration-inventory flow is available only when `DEMO_MODE_ENABLED=true` and `NODE_ENV` is not `production`. Use a local or isolated non-production environment, and explicitly select a small product set and separate demo quantities through **Admin Dashboard → Demo Inventory**. Its administrator-only bulk action can enable all existing products with random demo quantities from 1 to 100; use it only after confirming the product count on a dedicated non-production database. Products with active demo reservations are skipped and reported. Demo quantities never establish physical inventory.
+4. Use only a Razorpay Test Mode key ID beginning with `rzp_test_` and its matching key secret. The key secret must remain server-side.
+5. Use a test customer account and non-sensitive test contact/address details. Do not use a customer's real personal information.
+6. To test webhooks, configure a publicly reachable HTTPS test endpoint. Test webhooks cannot be delivered directly to localhost.
 
 The configured Render service and Atlas contents were not changed for this guide.
 
@@ -17,18 +17,20 @@ The configured Render service and Atlas contents were not changed for this guide
 
 1. In the Razorpay Dashboard, switch to **Test Mode** and obtain the Test Mode API key pair. Keep the key secret private.
 2. Set `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in the staging service's private environment. Confirm the application payment configuration reports Test Mode.
-3. Sign in as the staging test customer, add a physically verified product to the cart, and proceed through delivery and checkout.
+3. Sign in as the test customer, add a physically verified product (or an explicitly selected demo-inventory product in the isolated demo flow) to the cart, and proceed through delivery and checkout. A single order cannot mix physical and demo inventory.
 4. Confirm the amount shown in Checkout matches the trusted order total. The backend creates or reuses the Razorpay order and converts the amount to paise; do not alter the amount in browser tools.
 5. In Razorpay Checkout, select **Card** and use the official [Razorpay Test Card Details](https://razorpay.com/docs/payments/payments/test-card-details/). For example, the documented Indian Visa test card is `4100 2800 0000 1007`. Use a random CVV and a future expiry date. On the simulated bank page, enter a random OTP of 4–10 digits for success.
-6. Verify that the app reports success only after server verification. In the staging order record, confirm the expected order/payment IDs, INR amount, captured status, and `isPaid: true`. Confirm the stock was reserved once, not again on retries.
-7. If SMTP is configured in staging, verify the confirmation reaches a test mailbox and does not contain secrets. Otherwise, the application should log that optional email was skipped without failing payment.
+6. Card networks, netbanking banks, wallets, and UPI options are supplied by Razorpay Checkout according to the Test Mode account configuration and current sandbox support. A method appearing in Checkout does not guarantee that the provider supports a successful test for it; use only the current official test instruments and provider guidance.
+7. Verify that the app reports success only after server verification. In the test order record, confirm the expected order/payment IDs, INR amount, captured status, and `isPaid: true`. Confirm that only the appropriate inventory field was reserved once (physical `stock` or separate `demoStock`), not again on retries.
+8. If SMTP is configured in staging, verify the confirmation reaches a test mailbox and does not contain secrets. Otherwise, the application should log that optional email was skipped without failing payment.
 
 ## Failed payment and retry
 
 1. Start a separate staging checkout. To exercise a declined/insufficient-funds case, use an official error-scenario card from the Razorpay test-card documentation and choose **Failure** on the simulated bank page.
 2. Confirm the attempt is not reported as paid. A failed or authorized payment must not set the order to paid; only a matching captured payment can do that.
-3. Retry using the same pending checkout where appropriate. The app associates retries with the existing order and Razorpay order ID; check that a retry does not reserve the same items a second time.
-4. **Known limitation:** failed or abandoned Razorpay orders can retain reserved stock. There is no automatic expiration/reconciliation job. Do not cancel an order with an active Razorpay order ID through the admin UI; the backend rejects that action until its payment state is reconciled. Use a disposable staging database or an explicitly approved cleanup plan.
+3. From **My Orders**, use **Retry Payment** for an eligible pending order. The server verifies ownership and checks the existing Razorpay order amount, currency, order status, and prior payment statuses before returning the same order ID to Checkout. It never creates a replacement internal or Razorpay order for a retry. If the stored Razorpay order ID is missing or the provider status is ambiguous, payment recovery is required and the reservation remains held.
+4. Demo Razorpay orders expire after 16 minutes; their separate inventory reservations expire after 20 minutes. Expired demo reservations are released only after the server confirms the provider order's recorded expiry and verifies there is no captured, authorized, or otherwise unresolved payment. If the provider is unavailable or its state is ambiguous, the reservation is retained for a later reconciliation attempt.
+5. Physical-inventory order expiration is unchanged by the demo feature. Use an isolated test database or an explicitly approved cleanup plan for physical-order tests.
 
 ## Configure a Test Mode webhook
 

@@ -45,9 +45,17 @@ test('invoice stays on one page for a short order and paginates large orders', (
   assert.ok(createInvoiceDocument(createOrder(30)).getNumberOfPages() > 1);
 });
 
-test('invoice identifies historical Olist prices as estimates', () => {
+test('invoice explains that estimated catalogue prices differ from charged order amounts', () => {
   const order = createOrder(1);
+  order.orderItems[0].name = 'Olist Home Essentials product 44BE5793';
+  order.orderItems[0].category = 'Home Essentials';
   order.orderItems[0].sku = 'OLIST-00000000000000000000000000000000';
+  order.orderItems[0].inventoryMode = 'simulated-demo';
+  order.orderItems[0].inventoryStatus = 'unverified';
   const pdfContent = createInvoiceDocument(order).output().replace(/\0/g, '');
-  assert.ok(pdfContent.includes('Olist catalogue prices are historical estimates'));
+  assert.ok(pdfContent.includes('Some catalogue prices are estimates; the order amounts above are the amounts charged.'));
+  assert.ok(pdfContent.includes('Home Essentials product 44BE5793'));
+  assert.equal(pdfContent.includes('Olist'), false);
+  assert.equal(pdfContent.includes('OLIST-'), false);
+  assert.equal(pdfContent.includes('Simulated demo stock'), false);
 });

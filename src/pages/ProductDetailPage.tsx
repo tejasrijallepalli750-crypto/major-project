@@ -8,7 +8,13 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import {
   formatCategoryLabel,
-  hasSimulatedOlistInventory,
+  getCustomerProductBrand,
+  getCustomerProductDescription,
+  getCustomerProductFeatures,
+  getCustomerProductName,
+  getAvailablePurchaseStock,
+  getPurchaseUnavailableReason,
+  isDemoPurchase,
   isEstimatedOlistPrice,
   isInventoryVerified,
 } from '../utils/productPresentation';
@@ -144,7 +150,13 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
   }
 
   const inventoryVerified = isInventoryVerified(product.inventoryStatus);
-  const canPurchase = inventoryVerified && product.stock > 0;
+  const demoProduct = isDemoPurchase(product);
+  const availableStock = getAvailablePurchaseStock(product);
+  const canPurchase = availableStock > 0;
+  const purchaseUnavailableReason = getPurchaseUnavailableReason(product);
+  const productName = getCustomerProductName(product);
+  const productBrand = getCustomerProductBrand(product.brand);
+  const productDescription = getCustomerProductDescription(product.description);
 
   const handleAddToCart = () => {
     if (canPurchase) {
@@ -184,7 +196,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
 
   const hasReviewed = Boolean(user && reviews.some((review) => review.userId === user.id));
 
-  const visibleFeatures = (product.features || []).filter((feature) => feature !== 'Imported from /dataset folder');
+  const visibleFeatures = getCustomerProductFeatures(product.features);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -216,24 +228,21 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 <span className="text-slate-500">Category:</span>
                 <span className="font-semibold text-slate-800">{formatCategoryLabel(product.category)}</span>
               </div>
-              {product.brand && <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
+              {productBrand && <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
                 <span className="text-slate-500">Brand / Manufacturer:</span>
-                <span className="font-semibold text-slate-800">{product.brand}</span>
+                <span className="font-semibold text-slate-800">{productBrand}</span>
               </div>}
-              <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
-                <span className="text-slate-500">Inventory Status:</span>
-                <span className={`font-semibold ${canPurchase ? 'text-emerald-700' : 'text-rose-600'}`}>
-                  {!inventoryVerified ? 'Inventory not verified' : canPurchase ? `${product.stock} units available` : 'Out of stock'}
-                </span>
-              </div>
+              {(inventoryVerified || demoProduct) && (
+                <div className="p-3 bg-slate-50 rounded-lg flex justify-between">
+                  <span className="text-slate-500">Availability:</span>
+                  <span className={`font-semibold ${canPurchase ? 'text-emerald-700' : 'text-rose-600'}`}>
+                    {demoProduct
+                      ? canPurchase ? `${availableStock} demo units available` : 'Demo stock unavailable'
+                      : canPurchase ? `${availableStock} units available` : 'Out of stock'}
+                  </span>
+                </div>
+              )}
             </div>
-            {!inventoryVerified && (
-              <p className="mt-3 text-xs font-medium text-amber-700">
-                {hasSimulatedOlistInventory(product.inventoryMode, product.inventoryStatus)
-                  ? 'This demo quantity is not physically verified and is not supplied by Olist.'
-                  : 'This quantity is unavailable until an administrator physically verifies inventory.'}
-              </p>
-            )}
 
             {visibleFeatures.length > 0 && (
               <div className="mt-4">
@@ -256,24 +265,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div>
             {/* Unboxed Metadata */}
             <div className="flex items-center gap-2 text-xs text-slate-500 uppercase tracking-wider font-medium mb-2">
-              {product.brand && <span>{product.brand}</span>}
-              {product.brand && <span aria-hidden="true">·</span>}
+              {productBrand && <span>{productBrand}</span>}
+              {productBrand && <span aria-hidden="true">·</span>}
               <span>{formatCategoryLabel(product.category)}</span>
             </div>
 
             {/* Product Title */}
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight leading-snug">
-              {product.name}
+              {productName}
             </h1>
 
             {/* Rating */}
-            {product.numReviews > 0 ? <div className="flex items-center gap-2 mt-2">
+            {product.numReviews > 0 && <div className="flex items-center gap-2 mt-2">
               <div className="flex items-center gap-1 text-xs text-slate-700">
                 <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                 <span className="font-bold">{product.rating.toFixed(1)}</span>
                 <span className="text-slate-400 font-normal">({product.numReviews} customer reviews)</span>
               </div>
-            </div> : <p className="mt-2 text-xs text-slate-500">No customer reviews yet</p>}
+            </div>}
           </div>
 
           {/* Pricing in INR */}
@@ -285,22 +294,31 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             </div>
             {isEstimatedOlistPrice(product.sku) && (
               <p className="mt-1 text-xs text-amber-700">
-                Historical price estimate from Olist orders; not an original or current market price.
+                Reference price estimate.
               </p>
             )}
           </div>
+          {demoProduct && (
+            <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] leading-relaxed text-violet-800">
+              Demonstration inventory · Razorpay TEST payment only. This quantity is separate from physical stock.
+            </div>
+          )}
 
           {/* Prose Description */}
-          <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-            {product.description}
-          </p>
+          {productDescription && (
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              {productDescription}
+            </p>
+          )}
 
           {/* Quantity Selector & Stock State */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-700">Select Quantity</span>
               <span className="text-xs text-slate-500">
-                {!inventoryVerified ? 'Inventory not verified' : canPurchase ? `${product.stock} units in stock` : 'Out of stock'}
+                {demoProduct
+                  ? canPurchase ? `${availableStock} demo units available` : 'Demo stock unavailable'
+                  : canPurchase ? `${availableStock} units in stock` : inventoryVerified ? 'Out of stock' : null}
               </span>
             </div>
 
@@ -314,8 +332,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                 </button>
                 <span className="px-4 text-xs font-bold font-mono tabular-nums">{quantity}</span>
                 <button
-                  onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
-                  disabled={!canPurchase || quantity >= product.stock}
+                  onClick={() => setQuantity((q) => Math.min(availableStock, q + 1))}
+                  disabled={!canPurchase || quantity >= availableStock}
                   className="px-3 py-2 text-slate-600 hover:text-slate-900 cursor-pointer font-bold disabled:opacity-30"
                 >
                   +
@@ -342,6 +360,8 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <button
               onClick={handleAddToCart}
               disabled={!canPurchase}
+              title={!canPurchase ? purchaseUnavailableReason : undefined}
+              aria-label={canPurchase ? `Add ${productName} to cart` : `${productName}: ${purchaseUnavailableReason}`}
               className={`w-full py-3 px-4 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer ${
                 !canPurchase
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -358,7 +378,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               ) : (
                 <>
                   <ShoppingBag className="w-4 h-4" />
-                  <span>{canPurchase ? 'Add to Shopping Cart' : 'Inventory not verified'}</span>
+                  <span>Add to Shopping Cart</span>
                 </>
               )}
             </button>
@@ -366,10 +386,18 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
             <button
               onClick={handleBuyNow}
               disabled={!canPurchase}
+              title={!canPurchase ? purchaseUnavailableReason : undefined}
+              aria-label={canPurchase ? `Buy ${productName} now` : `Buy now unavailable: ${purchaseUnavailableReason}`}
               className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-40"
             >
               Buy now
             </button>
+            {!canPurchase && purchaseUnavailableReason && (
+              <p role="status" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{purchaseUnavailableReason}</span>
+              </p>
+            )}
           </div>
 
           {/* Delivery & Trust Highlights */}
@@ -389,11 +417,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
       <section className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 space-y-6" aria-labelledby="product-reviews-heading">
         <div>
           <h2 id="product-reviews-heading" className="text-xl font-bold text-slate-900">Customer Reviews</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            {product.numReviews > 0
-              ? `${product.rating.toFixed(1)} out of 5 · ${product.numReviews} review${product.numReviews === 1 ? '' : 's'}`
-              : 'No customer reviews yet'}
-          </p>
+          {product.numReviews > 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              {product.rating.toFixed(1)} out of 5 · {product.numReviews} review{product.numReviews === 1 ? '' : 's'}
+            </p>
+          )}
         </div>
 
         {reviewError && (
@@ -477,9 +505,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-xs text-slate-500">Be the first to share a review.</p>
-        )}
+        ) : null}
       </section>
 
       {/* Recommended Products & Customers Also Viewed Section */}
@@ -522,7 +548,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                   </div>
                   <p className="text-[11px] font-medium text-slate-500 uppercase">{formatCategoryLabel(rec.category)}</p>
                   <h4 className="text-xs font-bold text-slate-900 line-clamp-1 group-hover:text-amber-600 transition-colors mt-0.5">
-                    {rec.name}
+                      {getCustomerProductName(rec)}
                   </h4>
                   {rec.numReviews > 0 && <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
                     <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
@@ -536,18 +562,24 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
                     ₹{rec.price.toLocaleString('en-IN')}
                   </span>
                   {isEstimatedOlistPrice(rec.sku) && (
-                    <span className="text-[10px] text-amber-700">Historical estimate</span>
+                    <span className="text-[10px] text-slate-500">Reference estimate</span>
                   )}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       addToCart(rec, 1);
                     }}
-                    disabled={!isInventoryVerified(rec.inventoryStatus) || rec.stock < 1}
+                    disabled={getAvailablePurchaseStock(rec) < 1}
+                    title={getAvailablePurchaseStock(rec) < 1
+                      ? "This item can't be added to your cart right now."
+                      : undefined}
+                    aria-label={getAvailablePurchaseStock(rec) < 1
+                      ? `${getCustomerProductName(rec)} cannot be added to cart right now`
+                      : `Add ${getCustomerProductName(rec)} to cart`}
                     className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <ShoppingBag className="w-3 h-3" />
-                    <span>{isInventoryVerified(rec.inventoryStatus) && rec.stock > 0 ? 'Add' : 'Unavailable'}</span>
+                    <span>Add</span>
                   </button>
                 </div>
               </div>

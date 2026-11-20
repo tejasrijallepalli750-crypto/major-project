@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import {
   getCategoryArtPath,
+  getCustomerProductName,
   getOlistCategoryImage,
   getProductImageSource,
   isOlistCatalogueProductSku,
-  isOlistEnrichedImagePath,
 } from '../utils/productPresentation';
 
 interface ProductImageProps {
@@ -32,6 +32,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
   const [failedFallback, setFailedFallback] = useState(false);
   const isOlistProduct = isOlistCatalogueProductSku(sku || '');
   const categoryImage = isOlistProduct ? getOlistCategoryImage(category) : undefined;
+  const customerName = getCustomerProductName({ name, sku });
   const primarySrc = getProductImageSource(sku || '', category, src);
   const fallbackSrc = categoryImage?.illustrationPath || (category ? getCategoryArtPath(category) : '');
   const imageSrc = failedSource
@@ -48,7 +49,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
       {imageSrc && !failedFallback ? (
         <img
           src={imageSrc}
-          alt={name}
+          alt={customerName}
           onError={() => {
             if (!failedSource) setFailedSource(true);
             else setFailedFallback(true);
@@ -60,20 +61,11 @@ export const ProductImage: React.FC<ProductImageProps> = ({
         <div
           className="flex h-full w-full flex-col items-center justify-center gap-2 bg-slate-100 text-slate-500"
           role="img"
-          aria-label={`${name} image unavailable`}
+          aria-label={`${customerName} image unavailable`}
         >
           <ImageOff className="h-8 w-8" aria-hidden="true" />
           <span className="text-[10px] font-medium">Image unavailable</span>
         </div>
-      )}
-      {isOlistProduct && (
-        <span className="absolute bottom-2 left-2 rounded bg-white/90 px-2 py-1 text-[10px] font-medium text-slate-700 shadow-sm">
-          {categoryImage?.sourceType === 'approved-photo'
-            ? 'Representative category photo, not original product photo'
-            : isOlistEnrichedImagePath(primarySrc)
-              ? 'Generated representative visual'
-              : 'Category illustration, not original product photo'}
-        </span>
       )}
     </div>
   );

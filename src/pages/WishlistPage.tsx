@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { useWishlist } from '../context/WishlistContext';
 import { ProductCard } from '../components/ProductCard';
 import { BackButton } from '../components/BackButton';
+import { getCustomerProductName } from '../utils/productPresentation';
 
 interface WishlistPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -71,7 +72,7 @@ export const WishlistPage: React.FC<WishlistPageProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => removeFromWishlist(product.id)}
-                aria-label={`Remove ${product.name} from wishlist`}
+                aria-label={`Remove ${getCustomerProductName(product)} from wishlist`}
                 className="absolute right-3 top-3 z-10 rounded-full bg-white/90 p-2 text-rose-600 shadow-sm hover:bg-white"
               >
                 <Trash2 className="h-4 w-4" />

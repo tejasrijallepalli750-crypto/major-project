@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { Order } from '../types';
 import { getOrderPaymentSummary } from './orderPaymentSummary';
-import { isEstimatedOlistPrice } from './productPresentation';
+import { getCustomerProductName, isEstimatedOlistPrice, isOlistCatalogueProductSku } from './productPresentation';
 
 export const createInvoiceDocument = (order: Order) => {
   const paymentSummary = getOrderPaymentSummary(order);
@@ -132,13 +132,12 @@ export const createInvoiceDocument = (order: Order) => {
     }
 
     y += 7;
-    doc.text(item.name.slice(0, 48), 24, y);
+    doc.text(getCustomerProductName(item).slice(0, 48), 24, y);
     doc.setTextColor(148, 163, 184);
     doc.setFontSize(7.5);
-    const inventoryNote = item.inventoryMode === 'simulated-demo' && item.inventoryStatus !== 'verified'
-      ? ' | Simulated demo stock'
-      : '';
-    doc.text(`SKU: ${item.sku || 'N/A'}${inventoryNote}`.slice(0, 58), 24, y + 4);
+    if (item.sku && !isOlistCatalogueProductSku(item.sku)) {
+      doc.text(`SKU: ${item.sku}`.slice(0, 58), 24, y + 4);
+    }
 
     doc.setFontSize(8.5);
     doc.setTextColor(30, 41, 59);
@@ -203,7 +202,7 @@ export const createInvoiceDocument = (order: Order) => {
     doc.text('Computer-generated order invoice. Not a tax invoice.', 20, footerY + 6);
     doc.text(`Payment status: ${paymentSummary.statusLabel}.`, 20, footerY + 11);
     if (containsEstimatedOlistPrices) {
-      doc.text('Olist catalogue prices are historical estimates, not current prices.', 20, footerY + 16);
+      doc.text('Some catalogue prices are estimates; the order amounts above are the amounts charged.', 20, footerY + 16);
     }
     doc.text('Thank you for shopping with AURA Retail.', pageWidth - 20, footerY + 6, { align: 'right' });
   }

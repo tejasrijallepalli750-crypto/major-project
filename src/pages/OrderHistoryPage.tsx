@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Package, Download, ExternalLink, RefreshCw, AlertCircle, ShoppingBag } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Download, RefreshCw, AlertCircle, ShoppingBag, Trash2 } from 'lucide-react';
 import { Order } from '../types';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
-import { ProductImage } from '../components/ProductImage';
-import { hasSimulatedOlistInventory, isEstimatedOlistPrice } from '../utils/productPresentation';
 import { BackButton } from '../components/BackButton';
+import { RazorpayModal } from '../components/RazorpayModal';
+import { CheckPaymentStatusButton } from '../components/CheckPaymentStatusButton';
+import { OrderItemProductCard } from '../components/OrderItemProductCard';
+import {
+  canRequestOrderCancellation,
+  getPaymentRetryVisibility,
+  PaymentRefreshState,
+} from '../utils/paymentRetry';
 
 interface OrderHistoryPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -16,13 +22,125 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [retryingOrderId, setRetryingOrderId] = useState<string | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [removingOrderId, setRemovingOrderId] = useState<string | null>(null);
+  const [paymentRefreshStatus, setPaymentRefreshStatus] = useState<Record<string, PaymentRefreshState>>({});
+  const [refreshingPaymentOrderIds, setRefreshingPaymentOrderIds] = useState<Record<string, boolean>>({});
+  const [cancellationStatus, setCancellationStatus] = useState<Record<string, boolean>>({});
+  const [activeRetry, setActiveRetry] = useState<{
+    order: Order;
+    data: Awaited<ReturnType<typeof api.retryPaymentOrder>>['data'];
+  } | null>(null);
+  const retryLock = useRef(false);
+  const removalLock = useRef(false);
+  const paymentStatusRequests = useRef(new Map<
+    string,
+    ReturnType<typeof api.refreshOrderPaymentStatus>
+  >());
+
+  const requestPaymentStatusRefresh = (orderId: string) => {
+    const activeRequest = paymentStatusRequests.current.get(orderId);
+    if (activeRequest) return activeRequest;
+
+    setRefreshingPaymentOrderIds((current) => ({ ...current, [orderId]: true }));
+    const request = api.refreshOrderPaymentStatus(orderId).finally(() => {
+      if (paymentStatusRequests.current.get(orderId) === request) {
+        paymentStatusRequests.current.delete(orderId);
+      }
+      setRefreshingPaymentOrderIds((current) => ({ ...current, [orderId]: false }));
+    });
+    paymentStatusRequests.current.set(orderId, request);
+    return request;
+  };
+
+  const loadPaymentRefreshStatus = async (orderList: Order[]): Promise<Order[]> => {
+    const candidates = orderList.filter((order) =>
+      !order.isPaid && order.status === 'Pending' && order.paymentMethod === 'Razorpay');
+    const initialStatus: Record<string, PaymentRefreshState> = Object.fromEntries(candidates.map((order) => [
+      order.id,
+      order.razorpayOrderId ? 'verification-pending' : 'recovery',
+    ]));
+    setPaymentRefreshStatus(initialStatus);
+
+    const results = await Promise.all(candidates.map(async (order) => {
+      if (!order.razorpayOrderId) {
+        return [order.id, { order, state: 'recovery' as const }] as const;
+      }
+      try {
+        const status = await requestPaymentStatusRefresh(order.id);
+        return [order.id, {
+          order: status.order,
+          state: status.state,
+        }] as const;
+      } catch (error) {
+        console.error('Failed to refresh payment status in My Orders:', error);
+        return [order.id, {
+          order,
+          state: 'verification-pending' as const,
+        }] as const;
+      }
+    }));
+
+    const refreshedById = new Map(results.map(([id, result]) => [id, result]));
+    const refreshedOrders = orderList.map((order) => refreshedById.get(order.id)?.order || order);
+    setOrders(refreshedOrders);
+    setPaymentRefreshStatus(Object.fromEntries(results.map(([id, result]) => [id, result.state])));
+    return refreshedOrders;
+  };
+
+  const checkPaymentStatus = async (order: Order) => {
+    if (!order.razorpayOrderId || paymentStatusRequests.current.has(order.id)) return;
+    setPaymentRefreshStatus((current) => ({
+      ...current,
+      [order.id]: 'verification-pending',
+    }));
+    try {
+      const status = await requestPaymentStatusRefresh(order.id);
+      setOrders((current) => current.map((saved) => saved.id === order.id ? status.order : saved));
+      setPaymentRefreshStatus((current) => ({
+        ...current,
+        [order.id]: status.state,
+      }));
+    } catch (error) {
+      console.error('Failed to check payment status in My Orders:', error);
+      setPaymentRefreshStatus((current) => ({
+        ...current,
+        [order.id]: 'verification-pending',
+      }));
+    }
+  };
+
+  const loadCancellationStatus = async (orderList: Order[]) => {
+    const candidates = orderList.filter(canRequestOrderCancellation);
+    setCancellationStatus(Object.fromEntries(candidates.map((order) => [
+      order.id,
+      false,
+    ])));
+    const results = await Promise.all(candidates.map(async (order) => {
+      try {
+        const status = await api.getOrderCancellationStatus(order.id);
+        return [order.id, status.canCancel] as const;
+      } catch (error) {
+        console.error('Failed to check order cancellation status in My Orders:', error);
+        return [order.id, false] as const;
+      }
+    }));
+    setCancellationStatus(Object.fromEntries(results));
+  };
+
+  const refreshOrderHistory = async () => {
+    const result = await api.getMyOrders();
+    setOrders(result.data);
+    const updatedOrders = await loadPaymentRefreshStatus(result.data);
+    await loadCancellationStatus(updatedOrders);
+  };
 
   useEffect(() => {
     const fetchOrders = async () => {
       setIsLoading(true);
       try {
-        const res = await api.getMyOrders();
-        setOrders(res.data);
+        await refreshOrderHistory();
       } catch (err) {
         console.error('Failed to load order history', err);
       } finally {
@@ -35,6 +153,76 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
       setIsLoading(false);
     }
   }, [user]);
+
+  const retryPayment = async (order: Order) => {
+    if (retryLock.current || activeRetry) return;
+    retryLock.current = true;
+    setRetryingOrderId(order.id);
+    try {
+      const result = await api.retryPaymentOrder(order.id);
+      setActiveRetry({ order, data: result.data });
+    } catch (error) {
+      console.error('Failed to retry payment in My Orders:', error);
+    } finally {
+      retryLock.current = false;
+      setRetryingOrderId(null);
+    }
+  };
+
+  const handleRetrySuccess = (verifiedOrder: Order) => {
+    setOrders((current) => current.map((order) => order.id === verifiedOrder.id ? verifiedOrder : order));
+    setPaymentRefreshStatus((current) => ({
+      ...current,
+      [verifiedOrder.id]: 'paid',
+    }));
+    setActiveRetry(null);
+  };
+
+  const cancelOrder = async (order: Order) => {
+    if (retryLock.current || activeRetry) return;
+    const confirmed = window.confirm(
+      'Cancel this order? AURA will first verify that payment cannot still complete. If payment status is unresolved, the order and any reserved inventory will remain unchanged.',
+    );
+    if (!confirmed) return;
+
+    retryLock.current = true;
+    setCancellingOrderId(order.id);
+    try {
+      const result = await api.cancelOrder(order.id);
+      setOrders((current) => current.map((saved) => saved.id === result.data.id ? result.data : saved));
+      await refreshOrderHistory();
+    } catch (error) {
+      console.error('Failed to cancel order in My Orders:', error);
+    } finally {
+      retryLock.current = false;
+      setCancellingOrderId(null);
+    }
+  };
+
+  const removeOrderFromHistory = async (order: Order) => {
+    if (removalLock.current || retryLock.current || activeRetry) return;
+    const confirmed = window.confirm(
+      `Remove ${order.orderNumber} from My Orders? The order record and invoice will be retained for audit purposes.`,
+    );
+    if (!confirmed) return;
+
+    removalLock.current = true;
+    setRemovingOrderId(order.id);
+    try {
+      await api.removeOrderFromMyHistory(order.id);
+      setOrders((current) => current.filter((saved) => saved.id !== order.id));
+      try {
+        await refreshOrderHistory();
+      } catch (error) {
+        console.error('Removed order history could not be refreshed:', error);
+      }
+    } catch (error) {
+      console.error('Failed to remove order from My Orders:', error);
+    } finally {
+      removalLock.current = false;
+      setRemovingOrderId(null);
+    }
+  };
 
   if (!user) {
     return (
@@ -90,6 +278,19 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
+            const refreshedPayment = paymentRefreshStatus[order.id];
+            const awaitingStatus = order.paymentMethod === 'Razorpay'
+              && !order.isPaid
+              && order.status === 'Pending'
+              && Boolean(order.razorpayOrderId)
+              && !refreshedPayment;
+            const retryVisibility = getPaymentRetryVisibility(
+              order,
+              Date.now(),
+              awaitingStatus ? 'verification-pending' : refreshedPayment,
+            );
+            const cancellationCandidate = canRequestOrderCancellation(order);
+            const canCancel = cancellationCandidate && cancellationStatus[order.id] === true;
             return (
             <div
               key={order.id}
@@ -123,6 +324,42 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {order.status === 'Cancelled' && !order.isPaid && (
+                    <button
+                      onClick={() => removeOrderFromHistory(order)}
+                      disabled={removingOrderId === order.id || Boolean(activeRetry)}
+                      aria-label={`Delete order ${order.orderNumber} from My Orders`}
+                      title="Remove this cancelled order from My Orders"
+                      className="px-3.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-60 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>{removingOrderId === order.id ? 'Removing…' : 'Delete'}</span>
+                    </button>
+                  )}
+                  <CheckPaymentStatusButton
+                    order={order}
+                    providerState={awaitingStatus ? 'verification-pending' : refreshedPayment}
+                    isChecking={Boolean(refreshingPaymentOrderIds[order.id]) || retryingOrderId === order.id || Boolean(activeRetry)}
+                    onCheck={() => checkPaymentStatus(order)}
+                  />
+                  {retryVisibility === 'retry' && (
+                    <button
+                      onClick={() => retryPayment(order)}
+                      disabled={retryingOrderId === order.id || cancellingOrderId === order.id || Boolean(activeRetry)}
+                      className="px-3.5 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {retryingOrderId === order.id ? 'Checking payment…' : 'Pay Again'}
+                    </button>
+                  )}
+                  {canCancel && (
+                    <button
+                      onClick={() => cancelOrder(order)}
+                      disabled={cancellingOrderId === order.id || retryingOrderId === order.id || Boolean(activeRetry)}
+                      className="px-3.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 disabled:opacity-60 rounded-lg transition-colors cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {cancellingOrderId === order.id ? 'Checking cancellation…' : 'Cancel Order'}
+                    </button>
+                  )}
                   <button
                     onClick={() => generateInvoicePDF(order)}
                     className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -136,28 +373,11 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
               {/* Items List */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {order.orderItems.map((item, idx) => (
-                  <div key={idx} className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl">
-                    <ProductImage
-                      src={item.image}
-                      name={item.name}
-                      category={item.category}
-                      sku={item.sku}
-                      className="h-12 w-12 shrink-0 rounded-lg border border-slate-200 bg-white"
-                      imageClassName="h-full w-full object-cover"
-                    />
-                    <div className="truncate">
-                      <p className="text-xs font-semibold text-slate-900 truncate">{item.name}</p>
-                      <p className="text-[11px] text-slate-500 font-mono">
-                        {item.quantity} × ₹{item.price.toLocaleString('en-IN')}
-                      </p>
-                      {hasSimulatedOlistInventory(item.inventoryMode, item.inventoryStatus) && (
-                        <p className="text-[10px] text-amber-700">Inventory was simulated at order time; not from Olist</p>
-                      )}
-                      {isEstimatedOlistPrice(item.sku) && (
-                        <p className="text-[10px] text-amber-700">Historical Olist price estimate</p>
-                      )}
-                    </div>
-                  </div>
+                  <OrderItemProductCard
+                    key={`${item.product}-${idx}`}
+                    item={item}
+                    onNavigate={onNavigate}
+                  />
                 ))}
               </div>
 
@@ -180,6 +400,16 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
             );
           })}
         </div>
+      )}
+      {activeRetry && (
+        <RazorpayModal
+          isOpen
+          order={activeRetry.order}
+          razorpayData={activeRetry.data}
+          onClose={() => setActiveRetry(null)}
+          onFailure={(message) => console.error('Razorpay checkout failed in My Orders:', message)}
+          onSuccess={handleRetrySuccess}
+        />
       )}
     </div>
   );

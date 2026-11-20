@@ -9,7 +9,12 @@ import { RazorpayModal } from '../components/RazorpayModal';
 import { StateSelectModal } from '../components/StateSelectModal';
 import { BackButton } from '../components/BackButton';
 import { checkoutIdempotency, CheckoutOrderRequest } from '../utils/checkoutIdempotency';
-import { hasSimulatedOlistInventory, isEstimatedOlistPrice, isInventoryVerified } from '../utils/productPresentation';
+import {
+  getCustomerProductName,
+  getAvailablePurchaseStock,
+  isDemoPurchase,
+  isEstimatedOlistPrice,
+} from '../utils/productPresentation';
 
 interface CheckoutPageProps {
   onNavigate: (view: string, param?: string) => void;
@@ -23,6 +28,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
   // Delivery Address Form State (Matching Indian e-commerce layout from video)
   const [recipientName, setRecipientName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
+  const [deliveryEmail, setDeliveryEmail] = useState(user?.email || '');
   const [phoneTouched, setPhoneTouched] = useState(false);
   const [houseBuilding, setHouseBuilding] = useState('');
   const [roadArea, setRoadArea] = useState('');
@@ -40,6 +46,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     if (user) {
       if (!recipientName && user.name) setRecipientName(user.name);
       if (!phone && user.phone) setPhone(user.phone.replace(/\D/g, '').slice(0, 10));
+      if (!deliveryEmail && user.email) setDeliveryEmail(user.email);
       if (user.address) {
         if (!houseBuilding && !roadArea && user.address.street) {
           const parts = user.address.street.split(',');
@@ -55,7 +62,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
         if (!postalCode && user.address.postalCode) setPostalCode(user.address.postalCode);
       }
     }
-  }, [user]);
+  }, [deliveryEmail, user]);
 
   // State for order creation & Razorpay modal
   const submissionLock = useRef(false);
@@ -109,6 +116,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     if (
       !recipientName.trim() ||
       !phone.trim() ||
+      !deliveryEmail.trim() ||
       !houseBuilding.trim() ||
       !roadArea.trim() ||
       !postalCode.trim() ||
@@ -117,8 +125,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
     ) {
       setPhoneTouched(true);
       setErrorMessage(
-        'Please complete all required delivery address fields (Recipient Name, Contact Phone, House/Building, Road/Area, PIN Code, State, and City).'
+        'Please complete all required delivery contact and address fields (Recipient Name, Contact Phone, Email, House/Building, Road/Area, PIN Code, State, and City).'
       );
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(deliveryEmail.trim())) {
+      setErrorMessage('Enter a valid delivery email address.');
       return;
     }
 
@@ -148,6 +161,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           'Razorpay payments are unavailable. Please contact the store administrator before continuing.'
         );
       }
+      if (cart.some(isDemoPurchase) && !paymentConfig.demoPurchasingAvailable) {
+        throw new Error('Demonstration checkout requires server-enabled demo mode and Razorpay TEST credentials.');
+      }
 
       let order = createdOrder;
       if (!order) {
@@ -156,6 +172,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           shippingAddress: {
             fullName: recipientName.trim(),
             phone: phone.trim(),
+            email: deliveryEmail.trim(),
             street: `${houseBuilding.trim()}, ${roadArea.trim()}`,
             city: city.trim(),
             district: '',
@@ -199,7 +216,8 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
 
   const handlePaymentSuccess = (verifiedOrder: Order) => handleOrderSuccess(verifiedOrder);
   const hasUnavailableInventory = cart.some((item) =>
-    !isInventoryVerified(item.inventoryStatus) || item.quantity > item.stock);
+    getAvailablePurchaseStock(item) < item.quantity);
+  const hasDemoItems = cart.some(isDemoPurchase);
 
   const handlePaymentFailure = (msg: string) => {
     setErrorMessage(`Payment error: ${msg}. You can retry the Razorpay checkout.`);
@@ -225,15 +243,15 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
           <div className="flex-1">{errorMessage}</div>
         </div>
       )}
-      {cart.some((item) => hasSimulatedOlistInventory(item.inventoryMode, item.inventoryStatus)) && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
-          This cart includes a simulated quantity that is not physically verified or supplied by Olist.
-        </div>
-      )}
       {hasUnavailableInventory && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-800">
-          Checkout is unavailable because one or more cart quantities are not physically verified or exceed available stock. Remove those items or return after an administrator verifies inventory.
+          One or more items can&apos;t currently be purchased in the selected quantity. Remove those items or return to your cart to continue.
         </div>
+      )}
+      {hasDemoItems && (
+        <p className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-xs leading-relaxed text-violet-800">
+          Demonstration inventory · Razorpay TEST payments only. No physical stock is represented by this demo quantity.
+        </p>
       )}
 
       {/* Grid: Form Left + Summary Right */}
@@ -323,6 +341,23 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                       </p>
                     )}
                   </div>
+                </div>
+
+                <div className="relative border border-slate-300 rounded-xl px-3.5 pt-2.5 pb-2 focus-within:border-purple-600 focus-within:ring-1 focus-within:ring-purple-600 bg-white transition-all">
+                  <label htmlFor="delivery-email" className="block text-[11px] font-medium text-slate-500">
+                    Delivery Email *
+                  </label>
+                  <input
+                    id="delivery-email"
+                    type="email"
+                    autoComplete="email"
+                    required
+                    maxLength={254}
+                    value={deliveryEmail}
+                    onChange={(event) => setDeliveryEmail(event.target.value)}
+                    className="w-full bg-transparent py-0.5 text-sm font-semibold text-slate-900 focus:outline-hidden"
+                    placeholder="name@example.com"
+                  />
                 </div>
 
                 {/* Row 2: House No., Building Name */}
@@ -508,14 +543,14 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
                   imageClassName="h-full w-full object-cover"
                 />
                 <div className="flex-1 truncate">
-                  <h4 className="text-xs font-semibold text-slate-900 truncate">{item.name}</h4>
+                  <h4 className="text-xs font-semibold text-slate-900 truncate">{getCustomerProductName(item)}</h4>
                   <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
                     <span>Qty: {item.quantity}</span>
                     <span>·</span>
                     <span>₹{item.price.toLocaleString('en-IN')}</span>
                   </div>
                   {isEstimatedOlistPrice(item.sku) && (
-                    <p className="text-[10px] text-amber-700">Historical Olist price estimate</p>
+                    <p className="text-[10px] text-slate-500">Reference price estimate</p>
                   )}
                 </div>
                 <span className="text-xs font-bold font-mono tabular-nums text-slate-900">

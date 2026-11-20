@@ -3,6 +3,7 @@ import { PackagePlus, Plus, Check } from 'lucide-react';
 import { Product } from '../types';
 import { useCart } from '../context/CartContext';
 import { ProductImage } from './ProductImage';
+import { getCustomerProductBrand, getCustomerProductName } from '../utils/productPresentation';
 
 interface CuratedBundlesSectionProps {
   products: Product[];
@@ -61,8 +62,10 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
                 imageClassName="h-full w-full object-cover"
               />
               <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">{item1.name}</p>
-                {item1.brand && <p className="text-xs text-slate-500 mt-0.5">{item1.brand}</p>}
+                <p className="text-xs font-bold text-slate-900 truncate">{getCustomerProductName(item1)}</p>
+                {getCustomerProductBrand(item1.brand) && (
+                  <p className="text-xs text-slate-500 mt-0.5">{getCustomerProductBrand(item1.brand)}</p>
+                )}
                 <p className="text-xs font-black text-slate-900 font-mono mt-1">
                   ₹{item1.price.toLocaleString('en-IN')}
                 </p>
@@ -88,8 +91,10 @@ export const CuratedBundlesSection: React.FC<CuratedBundlesSectionProps> = ({
                 imageClassName="h-full w-full object-cover"
               />
               <div className="min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">{item2.name}</p>
-                {item2.brand && <p className="text-xs text-slate-500 mt-0.5">{item2.brand}</p>}
+                <p className="text-xs font-bold text-slate-900 truncate">{getCustomerProductName(item2)}</p>
+                {getCustomerProductBrand(item2.brand) && (
+                  <p className="text-xs text-slate-500 mt-0.5">{getCustomerProductBrand(item2.brand)}</p>
+                )}
                 <p className="text-xs font-black text-slate-900 font-mono mt-1">
                   ₹{item2.price.toLocaleString('en-IN')}
                 </p>

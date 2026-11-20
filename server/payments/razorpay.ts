@@ -7,6 +7,11 @@ export interface RazorpayConfiguration {
   isConfigured: boolean;
 }
 
+export const getRazorpayStartupMessage = (isConfigured: boolean): string =>
+  isConfigured
+    ? 'Razorpay TEST mode enabled.'
+    : 'Razorpay TEST credentials are missing; checkout is disabled.';
+
 export interface RazorpayPayment {
   id?: string;
   order_id?: string;
@@ -14,6 +19,7 @@ export interface RazorpayPayment {
   currency?: string;
   status?: string;
   method?: string;
+  created_at?: number;
 }
 
 export type GatewayPaymentStatus = 'captured' | 'authorized' | 'failed' | 'pending';

@@ -4,7 +4,7 @@ import { CheckCircle, Download, ShieldCheck, MapPin } from 'lucide-react';
 import { Order } from '../types';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
 import { ProductImage } from '../components/ProductImage';
-import { hasSimulatedOlistInventory, isEstimatedOlistPrice } from '../utils/productPresentation';
+import { getCustomerProductName, isEstimatedOlistPrice } from '../utils/productPresentation';
 import { getOrderPaymentSummary } from '../utils/orderPaymentSummary';
 import { BackButton } from '../components/BackButton';
 
@@ -149,15 +149,12 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
                   imageClassName="h-full w-full object-cover"
                 />
                 <div>
-                  <h4 className="text-xs font-semibold text-slate-900">{item.name}</h4>
+                  <h4 className="text-xs font-semibold text-slate-900">{getCustomerProductName(item)}</h4>
                   <p className="text-[11px] text-slate-400 font-mono">
                     Qty: {item.quantity} × ₹{item.price.toLocaleString('en-IN')}
                   </p>
-                  {hasSimulatedOlistInventory(item.inventoryMode, item.inventoryStatus) && (
-                    <p className="text-[10px] text-amber-700">Inventory was simulated at order time; not sourced from Olist</p>
-                  )}
                   {isEstimatedOlistPrice(item.sku) && (
-                    <p className="text-[10px] text-amber-700">Historical Olist price estimate</p>
+                    <p className="text-[10px] text-slate-500">Reference price estimate</p>
                   )}
                 </div>
               </div>

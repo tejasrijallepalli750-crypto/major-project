@@ -24,9 +24,9 @@ This audit distinguishes code-level checks from integrations that were not exerc
 
 - Read-only Atlas inspection found 32,951 active Olist catalog products and 27 inactive curated products (32,978 total). Seven of eight existing AURA orders reference non-Olist SKUs, so the inactive products and all order snapshots must be retained. No catalog rewrite or database update was made.
 - The Olist products have indicative prices derived from historical BRL order-item averages, generated display titles, and no source-provided inventory. They are marked as estimates in customer and order views. All existing stock values without a physical verification marker are now treated as unverified and cannot be purchased. The admin product search can page through the full catalog and record a physical available-to-sell count. There is no bulk verification or stock migration.
-- The inventory metadata is additive and backward-compatible: missing `inventoryStatus` means `unverified`; no Atlas migration is required. The current verification metadata stores the latest verifier and timestamp, not a full adjustment ledger. Pending Razorpay orders can retain reserved stock while payment is retried; automatic expiry/reconciliation is not implemented.
+- The inventory metadata is additive and backward-compatible: missing `inventoryStatus` means `unverified`; no Atlas migration is required. The current verification metadata stores the latest verifier and timestamp, not a full adjustment ledger. Physical inventory remains restricted to verified stock. Demo reservations use separate fields and an expiry/reconciliation path; no product is automatically selected for demo purchases.
 - Olist historical records are not imported. The nine source CSVs are present and validated by a no-database dry run; see the report and approval gate below.
-- Olist has no original product photographs. Approved local Pexels assets are category representatives; remaining categories use local illustrations. The 27 curated seed-image records have not all been supplied with individually verified creator/source/license metadata, so those records are not fully provenance-documented.
+- Olist has no original product photographs. Product views render the existing mapped Pexels category photos or local illustrations; these category-level images are not original Olist product photos. The 27 curated seed-image records have not all been supplied with individually verified creator/source/license metadata, so those records are not fully provenance-documented.
 - Atlas connectivity and metadata were checked read-only; application CRUD, rollback, SMTP delivery, Razorpay Test Mode transactions/webhook delivery, Render health, and deployed behavior have not been tested end-to-end.
 - Order cancellation/refund reconciliation for Razorpay is intentionally conservative: paid orders require refund verification, and orders with an active Razorpay order ID require payment-state reconciliation before cancellation. A customer-facing cancellation endpoint and automatic stale-order release are not implemented.
 
@@ -49,7 +49,7 @@ This audit distinguishes code-level checks from integrations that were not exerc
    ```
 
 4. Edit `.env` locally and set `MONGODB_URI` and a unique `JWT_SECRET` of at least 32 characters. Never paste the URI into chat, source files, or frontend configuration. Do not commit `.env`.
-5. To create the first administrator, optionally set `ADMIN_EMAIL` and a unique `ADMIN_PASSWORD` of at least 12 characters before startup. The account is created only when that email is not already present. Remove the password from `.env` after the account has been created. If migrating the existing JSON database, its existing users are retained instead.
+5. To create the administrator, use the explicit bootstrap command below; normal server startup never creates or promotes an administrator. The command inserts only a missing `admin@aura.store` account in a confirmed non-production database. It will not promote an existing customer or reset an existing admin password.
 6. From the project root, install and start:
 
    ```powershell
@@ -77,6 +77,24 @@ MONGODB_DNS_SERVERS=8.8.8.8
 ```
 
 Replace the example with a resolver approved for your network. This changes DNS resolution for the Node.js process, not just MongoDB, and sends DNS queries to that resolver instead of the system resolver. The application rejects this setting when `NODE_ENV=production`. Restart `npm run dev` after changing it, then confirm `database.status` is `connected` at `/api/health`. Do not use a public resolver if organizational policy requires private DNS.
+
+### Bootstrap the first administrator
+
+The explicit bootstrap command uses the same `MONGODB_URI` as the application, disables Mongoose collection/index creation, and only inserts the administrator document. It refuses production mode, requires the confirmed database name to match the URI, and permits only database names marked `test`, `development`, `staging`, or `local`. It never promotes existing customers and never resets an existing account's password.
+
+In PowerShell, set the target email and enter the password without placing it in command history:
+
+```powershell
+$env:ADMIN_EMAIL = 'admin@aura.store'
+$securePassword = Read-Host 'Choose a unique administrator password (12+ characters)' -AsSecureString
+$env:ADMIN_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
+npm run admin:bootstrap -- --confirm-database aura_payment_test
+Remove-Item Env:ADMIN_PASSWORD
+Remove-Item Env:ADMIN_EMAIL
+Remove-Variable securePassword
+```
+
+Use the database name shown by your own `MONGODB_URI` in place of `aura_payment_test`; do not run this command against production. The command is repeatable: an existing admin is reported without changes. If the email already belongs to a customer, stop and use an explicitly authorized recovery procedure; the command will not change that role. After successful creation, sign in with the password you entered and remove any temporary `ADMIN_EMAIL`/`ADMIN_PASSWORD` values from `.env`.
 
 ## Move existing JSON data
 
@@ -128,7 +146,7 @@ Dry-run mode is safe to repeat, reports source file sizes and estimated BSON doc
 
 `server/catalog/catalogSeed.ts` contains 27 curated starter products. In the read-only Atlas snapshot, all 27 are inactive and the active sellable catalog consists of 32,951 Olist SKUs. The curated records remain stored because existing AURA order items reference them; do not delete or rewrite those products or historical orders. Olist display names are generated because the source has no product names. Olist INR prices are historical BRL order-item averages multiplied by the documented conversion rate, not current or original source prices. Product cards, details, cart, checkout, order views, email, and invoices label Olist prices as estimates.
 
-Olist source products contain no original product photographs or image URLs. Customer views use the centralized local category-photo/illustration mapping, with a fallback if an asset fails to load; the UI labels images as category representatives, not original Olist product photos. Approved Pexels category-photo source, creator, license, attribution, and hash metadata are in the category map. The curated seed image review is in `public/photo-review.html`; individual creator/source/license metadata for every curated image is not yet complete. Review the [Pexels license](https://www.pexels.com/license/) before redistribution or deployment.
+Olist source products contain no original product photographs or image URLs. Customer product views use the existing category image mapping and fallback behavior; category photographs and illustrations are not original Olist product photos. Approved Pexels category-photo source, creator, license, attribution, and hash metadata remain in the category map. The curated seed image review is in `public/photo-review.html`; individual creator/source/license metadata for every curated image is not yet complete. Review the [Pexels license](https://www.pexels.com/license/) before redistribution or deployment.
 
 Run the image check while the app is running:
 
@@ -160,7 +178,7 @@ The importer does not delete products or modify non-Olist products, users, order
 
 ### Olist category image mapping
 
-Olist product cards and other `OLIST-` product image views resolve images from the centralized `src/data/olistCategoryImageMap.ts` mapping rather than trusting the stored per-product image URL. This prevents an old or unrelated image assignment from being shown for an anonymous Olist product. The mapping covers all 73 non-empty Olist source categories and uncategorized products. The 10-product ABO sample remains separate.
+Olist product cards and other `OLIST-` product image views resolve images from the centralized `src/data/olistCategoryImageMap.ts` mapping rather than trusting the stored per-product image URL. The mapping covers all 73 non-empty Olist source categories and uncategorized products; these category-level images are not original Olist product photos. The 10-product ABO collection remains separate.
 
 The offline coverage report reads only the original Olist product and translation CSVs and local image files; it does not connect to MongoDB or modify catalogue data:
 
@@ -203,21 +221,21 @@ Products referenced by any order item, saved cart, or wishlist are kept as inact
 
 The reconciliation `--apply` and `--delete-unreferenced` options write to or delete Atlas data and require explicit owner approval after reviewing a dry-run report. Neither option was run during this audit. Preserve the 27 inactive curated product documents because existing AURA orders reference them.
 
-Olist has no current inventory quantities. Optional demo inventory is explicitly simulated, and it is never available to purchase. The reconciliation command initializes only marked Olist products with zero stock to 20 simulated units by default; `--demo-stock <quantity>` configures the displayed demo quantity. Existing non-zero stock and already initialized simulated stock are preserved, so rerunning reconciliation does not replenish units sold:
+Olist has no current inventory quantities. The Olist catalogue reconciliation command can initialize explicitly simulated `inventoryMode`/`stock` values for display, but those values are not sellable and do not enroll products in the separate demo-purchase mode. Existing non-zero stock and already initialized simulated stock are preserved:
 
 ```powershell
 npm run reconcile:olist-catalogue -- --enable-demo-inventory
 npm run reconcile:olist-catalogue -- --enable-demo-inventory --demo-stock 7
 ```
 
-These commands are dry runs; apply the inventory initialization only after reviewing the result and receiving explicit approval. Demo quantities are labeled, treated as unverified, and cannot pass cart/order validation or the atomic stock-allocation predicate. Do not use simulated quantities for a real sale.
+These commands are dry runs; apply the inventory initialization only after reviewing the result and receiving explicit approval. Simulated quantities are labeled, treated as unverified, and cannot pass physical cart/order validation or the physical stock-allocation predicate. Do not use them for a real sale.
 
 ```powershell
 npm run reconcile:olist-catalogue -- --apply --enable-demo-inventory
 npm run reconcile:olist-catalogue -- --apply --enable-demo-inventory --demo-stock 7
 ```
 
-Olist historical BRL-to-INR prices are estimates from historical order-item averages, not current market prices. Product photography uses a small curated subset of existing local images only for matching categories; otherwise it falls back to category illustrations. Neither is an original Olist product photo. No images are generated or copied during reconciliation.
+Olist historical BRL-to-INR prices are estimates from historical order-item averages, not current market prices. Product records retain a small curated subset of local category images and illustrations; neither are original Olist product photos. No images are generated or copied during reconciliation.
 
 ### Enrich Olist product images
 
@@ -255,7 +273,7 @@ Open `report.html` in a browser to inspect large previews and per-SKU source, cr
 
 ### Amazon Berkeley Objects sample catalogue
 
-The separate **ABO sample** navigation page contains ten read-only product listings. It is supplemental to Olist and does not add items to the sellable catalog, cart, wishlist, checkout, or order history. The sample IDs use the ABO listing ID and marketplace domain; no Olist product ID or Olist history record is reused.
+The ten read-only ABO product records appear under **More products** in the storefront. They are supplemental to Olist and do not add items to the sellable catalog, cart, wishlist, checkout, or order history. The sample IDs use the ABO listing ID and marketplace domain; no Olist product ID or Olist history record is reused. Source, license, attribution, and image-provenance records remain in `src/data/aboSampleCatalog.ts`.
 
 Each local image was selected from the listing's `main_image_id` in the official ABO listing metadata and is stored under `public/images/abo-sample/`. The sample manifest and provenance fields live in `src/data/aboSampleCatalog.ts`; they include the marketplace listing URL, ABO metadata source, main image ID, source image URL, license, attribution, image dimensions, byte length, SHA-256, and CDN processing details. The images are 500-pixel Amazon CDN JPEG derivatives copied without further local image modifications.
 
@@ -265,7 +283,7 @@ This sample is static and read-only. It does not connect to MongoDB and is not c
 
 ## Payment setup
 
-Razorpay checkout is disabled until valid Test Mode credentials are set in the server-only `.env` file. For a safe test transaction and webhook setup, follow the [Razorpay Test Mode manual guide](./RAZORPAY_TEST_MODE_GUIDE.md).
+Razorpay checkout is disabled until valid Test Mode credentials are set in the server-only `.env` file. For physical purchases, products still require verified physical inventory. For a separate, local/non-production demo flow using admin-selected demo inventory, set `DEMO_MODE_ENABLED=true`; this flag is ignored when `NODE_ENV=production`. Read the [Razorpay Test Mode manual guide](./RAZORPAY_TEST_MODE_GUIDE.md) before testing either flow.
 
 ```env
 RAZORPAY_KEY_ID=rzp_test_your_key_id
@@ -276,6 +294,18 @@ RAZORPAY_WEBHOOK_SECRET=optional_webhook_secret
 Use only credentials from Razorpay Dashboard **Test Mode**. The server rejects live key IDs; the test key ID is public to the checkout page, but the key secret and webhook secret must remain in the server-only `.env`. The backend calculates the order amount from its MongoDB order, reuses an associated Razorpay order on retries, verifies Checkout signatures against the stored Razorpay order ID, and fetches the payment from Razorpay before marking an order paid. Only a matching captured INR payment settles the order; authorized, failed, and pending states remain unpaid. Signed `payment.authorized`, `payment.failed`, and `payment.captured` webhooks are handled from the raw request body. `order.paid` is not handled; configure the payment-specific events instead. No end-to-end Razorpay Test Mode transaction was performed during this audit.
 
 To configure Test Mode, enter the values privately in `.env` and restart the backend. Do not paste credentials into chat, source code, or frontend files. A configured key pair enables checkout but does not prove end-to-end connectivity; a sandbox payment still needs to be completed. A webhook also requires a reachable HTTPS endpoint registered in the Razorpay Test Mode Dashboard and its separate webhook secret.
+
+### Separate demonstration inventory
+
+Demo inventory is an opt-in demonstration path and is not physical inventory. Use only a dedicated, non-production database and Razorpay Test Mode credentials:
+
+1. Keep `NODE_ENV=development` (or another non-production value), set `DEMO_MODE_ENABLED=true`, and configure a valid `rzp_test_` key pair in the server-only environment. The demo mode is always disabled when `NODE_ENV=production`; do not enable this flow on the live Render service.
+2. Sign in with an administrator account. In **Admin Dashboard → Demo Inventory**, find a small set of existing products and explicitly mark only those products eligible with a separate demo quantity. For an isolated non-production demonstration database only, the administrator may instead use **Enable All Products with Random Demo Stock (1–100)** after reviewing its product count and confirmation. This bulk action skips products with active demo reservations and reports any skipped or failed products. Both options change only `demoEligible` and `demoStock`; they do not change physical `stock`, inventory verification, product prices, or imagery. No product is selected by default.
+3. Use a customer account and a demo-eligible product to test Add to Cart, Buy Now, checkout, and Razorpay Test Mode. Demo and physical inventory cannot be mixed in one order. The server verifies payment signatures, gateway payment status, INR amount, and currency before marking an order paid.
+4. Demo quantities are reserved atomically when an order is created. The internal reservation expires after 20 minutes; the Razorpay order expires after 16 minutes. The server reconciles an expired reservation only after the provider confirms the exact Razorpay order expiry and verifies there is no captured, authorized, or otherwise unresolved payment. If provider status is unavailable or ambiguous, stock is retained; an administrator can use the reconciliation control to retry.
+5. Disable the flag when testing is complete. Demo orders are identified separately in administration and are not evidence of physical sales or inventory.
+
+No products have been selected or modified in Atlas for demo purchases during this code change. A successful sandbox transaction and webhook delivery still require a human-operated test environment and are not claimed as verified here.
 
 ### Order confirmation email
 

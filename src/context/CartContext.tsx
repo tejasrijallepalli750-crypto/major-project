@@ -3,7 +3,7 @@ import { Product, CartItem } from '../types';
 import { api } from '../services/api';
 import { useAuth } from './AuthContext';
 import { calculateOrderTotals } from '../utils/orderPricing';
-import { isInventoryVerified } from '../utils/productPresentation';
+import { getAvailablePurchaseStock } from '../utils/productPresentation';
 
 interface CartContextType {
   cart: CartItem[];
@@ -124,11 +124,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [cart, isAuthLoading, savedCartUserId, user]);
 
   const addToCart = (product: Product, quantity: number = 1) => {
-    if (!isInventoryVerified(product.inventoryStatus) || product.stock < 1) return;
+    const availableStock = getAvailablePurchaseStock(product);
+    if (availableStock < 1) return;
     setCart((prev) => {
       const existing = prev.find((item) => item.productId === product.id);
       if (existing) {
-        const newQty = Math.min(product.stock, existing.quantity + quantity);
+        const newQty = Math.min(availableStock, existing.quantity + quantity);
         return prev.map((item) =>
           item.productId === product.id
             ? {
@@ -138,10 +139,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 image: product.image,
                 category: product.category,
                 quantity: newQty,
-                stock: product.stock,
+                stock: availableStock,
                 sku: product.sku,
                 inventoryMode: product.inventoryMode,
                 inventoryStatus: product.inventoryStatus,
+                demoModeEnabled: product.demoModeEnabled,
+                demoPurchasingAvailable: product.demoPurchasingAvailable,
+                demoEligible: product.demoEligible,
+                demoStock: product.demoStock,
               }
             : item
         );
@@ -154,11 +159,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             price: product.price,
             image: product.image,
             category: product.category,
-            quantity: Math.min(product.stock, quantity),
-            stock: product.stock,
+            quantity: Math.min(availableStock, quantity),
+            stock: availableStock,
             sku: product.sku,
             inventoryMode: product.inventoryMode,
             inventoryStatus: product.inventoryStatus,
+            demoModeEnabled: product.demoModeEnabled,
+            demoPurchasingAvailable: product.demoPurchasingAvailable,
+            demoEligible: product.demoEligible,
+            demoStock: product.demoStock,
           },
         ];
       }
@@ -177,8 +186,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCart((prev) =>
       prev.map((item) => {
         if (item.productId === productId) {
-          if (!isInventoryVerified(item.inventoryStatus)) return item;
-          const clamped = Math.min(item.stock, quantity);
+          const availableStock = getAvailablePurchaseStock(item);
+          if (availableStock < 1) return item;
+          const clamped = Math.min(availableStock, quantity);
           return { ...item, quantity: clamped };
         }
         return item;

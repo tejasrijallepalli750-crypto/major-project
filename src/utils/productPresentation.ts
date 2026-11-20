@@ -54,11 +54,63 @@ export type OlistCategoryDefinitionWithPhoto = OlistCategoryImageDefinition & {
   approvedPhoto?: ApprovedOlistCategoryPhoto;
 };
 
-export const isOlistEnrichedImagePath = (image: string): boolean =>
-  /^\/images\/olist-enriched\/OLIST-[a-f\d]{32}\.webp$/i.test(image);
-
 export const isInventoryVerified = (status: string | undefined): boolean =>
   status === 'verified';
+
+export interface PurchaseInventory {
+  stock: number;
+  status?: 'active' | 'inactive';
+  inventoryStatus?: string;
+  demoModeEnabled?: boolean;
+  demoPurchasingAvailable?: boolean;
+  demoEligible?: boolean;
+  demoStock?: number;
+  canPurchase?: boolean;
+  purchaseUnavailableReason?: string | null;
+}
+
+export const isDemoPurchase = (product: PurchaseInventory): boolean =>
+  product.demoModeEnabled === true && product.demoEligible === true;
+
+export const getAvailablePurchaseStock = (product: PurchaseInventory): number => {
+  if (product.status === 'inactive' || product.canPurchase === false) return 0;
+  if (isDemoPurchase(product)) {
+    if (product.demoPurchasingAvailable !== true) return 0;
+    const stock = product.demoStock;
+    return typeof stock === 'number' && Number.isSafeInteger(stock) && stock > 0 ? stock : 0;
+  }
+  return isInventoryVerified(product.inventoryStatus) && Number.isSafeInteger(product.stock) && product.stock > 0
+    ? product.stock
+    : 0;
+};
+
+export const getPurchaseUnavailableReason = (product: PurchaseInventory): string | undefined => {
+  if (product.canPurchase === false) {
+    return product.purchaseUnavailableReason || 'This product is unavailable under the server inventory rules.';
+  }
+  if (product.status === 'inactive') return 'This product is currently inactive.';
+  if (isDemoPurchase(product)) {
+    if (product.demoPurchasingAvailable !== true) {
+      return 'Demonstration checkout is unavailable because server-side demo mode or Razorpay TEST setup is disabled.';
+    }
+    if (getAvailablePurchaseStock(product) < 1) {
+      return 'No demonstration stock is available. An administrator must assign demo stock before purchase.';
+    }
+    return undefined;
+  }
+
+  if (!isInventoryVerified(product.inventoryStatus)) {
+    if (product.demoModeEnabled === undefined) {
+      return 'The server did not provide purchase eligibility. Refresh the page; if this continues, restart the application server.';
+    }
+    if (product.demoModeEnabled) {
+      return 'This product is not selected for demonstration purchases. An administrator must enable it and assign demo stock.';
+    }
+    return 'Physical inventory is not verified, and demonstration purchasing is disabled by the server.';
+  }
+
+  return getAvailablePurchaseStock(product) < 1 ? 'This product is out of stock.' : undefined;
+};
 
 export const hasSimulatedOlistInventory = (
   mode: string | undefined,
@@ -84,6 +136,27 @@ export const formatCategoryLabel = (category: string): string => {
     .replace(/\s+/g, ' ')
     .replace(/\b[a-z]/g, (character) => character.toUpperCase());
 };
+
+export const getCustomerProductName = (product: { name: string; sku?: string }): string =>
+  isOlistCatalogueProductSku(product.sku || '')
+    ? product.name.replace(/^Olist\s+/i, '')
+    : product.name;
+
+export const getCustomerProductBrand = (brand: string | undefined): string =>
+  brand?.trim().toLowerCase() === 'olist historical catalogue' ? '' : brand || '';
+
+export const getCustomerProductDescription = (description: string | undefined): string =>
+  (description || '')
+    .replace(/^A catalogue display entry for an Olist product in [^.]+\.\s*/i, '')
+    .replace(/The representative category image is not an original Olist product photo\.\s*/i, '')
+    .replace(/\b(?:Imported from Olist|Imported from \/dataset folder|Not verified or sourced from Olist|Not sourced from Olist)\b\.?/gi, '')
+    .trim();
+
+export const getCustomerProductFeatures = (features: string[] | undefined): string[] =>
+  (features || []).filter((feature) =>
+    !/^(?:Olist historical catalogue|Representative category image; not an original Olist product photo|Generated display title based on translated category .+)$/i
+      .test(feature.trim())
+    && feature !== 'Imported from /dataset folder');
 
 const normalizeCategoryAlias = (category: string): string => category.trim().toLowerCase()
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -183,9 +256,6 @@ export const getOlistCategoryImage = (category: string | undefined): OlistCatego
   return { path: illustrationPath, sourceType: 'illustration', illustrationPath };
 };
 
-export const getProductImageSource = (sku: string, category: string | undefined, image: string): string =>
-  isOlistCatalogueProductSku(sku) ? getOlistCategoryImage(category).path : image;
-
 export const getOlistCategoryPhotoPath = (sourceCategory: string): string | undefined => {
   const image = getOlistCategoryImage(sourceCategory);
   return image.sourceType === 'approved-photo' ? image.path : undefined;
@@ -203,6 +273,9 @@ export const isOlistCatalogueProductSku = (sku: string): boolean =>
 
 export const isEstimatedOlistPrice = (sku: string): boolean =>
   isOlistCatalogueProductSku(sku);
+
+export const getProductImageSource = (sku: string, category: string | undefined, image: string): string =>
+  isOlistCatalogueProductSku(sku) ? getOlistCategoryImage(category).path : image;
 
 export const usesSharedOlistCatalogImage = (sku: string, image: string): boolean =>
   isOlistCatalogueProductSku(sku)

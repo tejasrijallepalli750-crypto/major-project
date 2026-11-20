@@ -4,7 +4,7 @@ const CHECKOUT_INTENT_STORAGE_KEY = 'aura_checkout_intent_v2';
 
 export interface CheckoutOrderRequest {
   orderItems: { productId: string; quantity: number }[];
-  shippingAddress: ShippingAddress;
+  shippingAddress: ShippingAddress & { email: string };
   paymentMethod: Order['paymentMethod'];
 }
 
