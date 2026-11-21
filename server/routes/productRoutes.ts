@@ -6,6 +6,7 @@ import { requireAuth, requireAdmin, AuthenticatedRequest } from '../middleware/a
 import { hasEligibleReviewOrder } from '../reviews/reviewRules';
 import { isDemoModeEnabled } from '../config/demoMode';
 import { z } from 'zod';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
@@ -53,7 +54,7 @@ router.get('/', async (req: Request, res: Response) => {
       totalPages: result.totalPages,
     });
   } catch (error) {
-    console.error('[Products] Fetch error:', error);
+    console.error('[Products] Fetch error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to fetch products.' });
   }
 });
@@ -86,7 +87,7 @@ router.get('/admin/all', requireAuth, requireAdmin, async (req: Request, res: Re
       totalPages: result.totalPages,
     });
   } catch (error) {
-    console.error('[Products] Admin catalog fetch error:', error);
+    console.error('[Products] Admin catalog fetch error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to fetch the product management catalog.' });
   }
 });
@@ -101,7 +102,7 @@ router.get('/:id/reviews', async (req: Request, res: Response) => {
     const reviews = await db.findProductReviews(product.id);
     return res.json({ success: true, data: reviews });
   } catch (error) {
-    console.error('[Products] Review fetch error:', error);
+    console.error('[Products] Review fetch error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to fetch product reviews.' });
   }
 });
@@ -140,7 +141,7 @@ router.post('/:id/reviews', requireAuth, async (req: AuthenticatedRequest, res: 
     if ((error as { code?: number }).code === 11000) {
       return res.status(409).json({ success: false, message: 'You have already reviewed this product.' });
     }
-    console.error('[Products] Review creation error:', error);
+    console.error('[Products] Review creation error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to submit product review.' });
   }
 });
@@ -207,7 +208,7 @@ router.post('/', requireAuth, requireAdmin, async (req: Request, res: Response) 
 
     return res.status(201).json({ success: true, message: 'Product created successfully', data: created });
   } catch (error) {
-    console.error('[Products] Creation error:', error);
+    console.error('[Products] Creation error:', safeErrorSummary(error));
     if ((error as { code?: number }).code === 11000) {
       return res.status(409).json({ success: false, message: 'That SKU or image is already assigned to another product.' });
     }
@@ -235,7 +236,7 @@ router.put('/:id/inventory', requireAuth, requireAdmin, async (req: Authenticate
     }
     return res.json({ success: true, message: 'Verified inventory quantity saved.', data: updated });
   } catch (error) {
-    console.error('[Products] Inventory update error:', error);
+    console.error('[Products] Inventory update error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to save verified inventory.' });
   }
 });
@@ -265,7 +266,7 @@ router.put('/:id/demo-inventory', requireAuth, requireAdmin, async (req: Authent
     if (error instanceof Error && error.name === 'InventoryError') {
       return res.status(409).json({ success: false, message: error.message });
     }
-    console.error('[Products] Demo inventory update error:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Products] Demo inventory update error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to save demonstration inventory.' });
   }
 });
@@ -340,7 +341,7 @@ router.put('/:id', requireAuth, requireAdmin, async (req: Request, res: Response
 
     return res.json({ success: true, message: 'Product updated successfully', data: updated });
   } catch (error) {
-    console.error('[Products] Update error:', error);
+    console.error('[Products] Update error:', safeErrorSummary(error));
     if ((error as { code?: number }).code === 11000) {
       return res.status(409).json({ success: false, message: 'That SKU or image is already assigned to another product.' });
     }
@@ -357,7 +358,7 @@ router.delete('/:id', requireAuth, requireAdmin, async (req: Request, res: Respo
     }
     return res.json({ success: true, message: 'Product deleted successfully.' });
   } catch (error) {
-    console.error('[Products] Deletion error:', error);
+    console.error('[Products] Deletion error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Failed to deactivate product.' });
   }
 });

@@ -3,7 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { db } from '../db/database';
 import { requireAuth, requireAdmin } from '../middleware/auth';
+import { allowDatasetMutationOutsideProduction } from '../middleware/datasetMutation';
 import { catalogSeed } from '../catalog/catalogSeed';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 const DATASET_DIR = path.resolve(process.cwd(), 'dataset');
@@ -12,11 +14,6 @@ const escapeCsv = (value: string | number): string => {
   const text = String(value);
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
-
-// Ensure dataset directory exists
-if (!fs.existsSync(DATASET_DIR)) {
-  fs.mkdirSync(DATASET_DIR, { recursive: true });
-}
 
 // GET /api/dataset/status
 // Scans the dataset directory and returns file names, sizes, and record previews
@@ -46,14 +43,15 @@ router.get('/status', requireAuth, requireAdmin, (_req: Request, res: Response) 
       filesCount: filesInfo.length,
       files: filesInfo,
     });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: 'Failed to scan dataset directory: ' + err.message });
+  } catch (error) {
+    console.error('[Dataset] Status scan failed:', safeErrorSummary(error));
+    return res.status(500).json({ success: false, message: 'Failed to scan dataset directory.' });
   }
 });
 
 // POST /api/dataset/sync
 // Reads all files in /dataset/ and imports products into the catalog
-router.post('/sync', requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+router.post('/sync', requireAuth, requireAdmin, allowDatasetMutationOutsideProduction, async (_req: Request, res: Response) => {
   try {
     if (!fs.existsSync(DATASET_DIR)) {
       return res.status(404).json({ success: false, message: 'Dataset folder does not exist.' });
@@ -82,14 +80,15 @@ router.post('/sync', requireAuth, requireAdmin, async (_req: Request, res: Respo
       processedFiles: result.processedFiles,
       errors: result.errors,
     });
-  } catch (err: any) {
-    return res.status(db.isConnected ? 500 : 503).json({ success: false, message: 'Sync failed: ' + err.message });
+  } catch (error) {
+    console.error('[Dataset] Sync failed:', safeErrorSummary(error));
+    return res.status(db.isConnected ? 500 : 503).json({ success: false, message: 'Dataset sync failed.' });
   }
 });
 
 // POST /api/dataset/upload
 // Allows uploading a dataset file directly into the /dataset directory
-router.post('/upload', requireAuth, requireAdmin, (req: Request, res: Response) => {
+router.post('/upload', requireAuth, requireAdmin, allowDatasetMutationOutsideProduction, (req: Request, res: Response) => {
   try {
     const { filename, content } = req.body;
     if (!filename || !content) {
@@ -114,14 +113,15 @@ router.post('/upload', requireAuth, requireAdmin, (req: Request, res: Response) 
       filename: cleanName,
       size: Buffer.byteLength(content, 'utf-8'),
     });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: 'Upload failed: ' + err.message });
+  } catch (error) {
+    console.error('[Dataset] Upload failed:', safeErrorSummary(error));
+    return res.status(500).json({ success: false, message: 'Dataset upload failed.' });
   }
 });
 
 // POST /api/dataset/sample
 // Creates or restores standard sample datasets in the /dataset directory
-router.post('/sample', requireAuth, requireAdmin, (_req: Request, res: Response) => {
+router.post('/sample', requireAuth, requireAdmin, allowDatasetMutationOutsideProduction, (_req: Request, res: Response) => {
   try {
     if (!fs.existsSync(DATASET_DIR)) {
       fs.mkdirSync(DATASET_DIR, { recursive: true });
@@ -156,8 +156,9 @@ router.post('/sample', requireAuth, requireAdmin, (_req: Request, res: Response)
       success: true,
       message: 'Sample dataset sample_products.csv created in /dataset directory.',
     });
-  } catch (err: any) {
-    return res.status(500).json({ success: false, message: 'Failed to create sample dataset: ' + err.message });
+  } catch (error) {
+    console.error('[Dataset] Sample dataset creation failed:', safeErrorSummary(error));
+    return res.status(500).json({ success: false, message: 'Failed to create sample dataset.' });
   }
 });
 

@@ -20,6 +20,7 @@ import { ReviewModel, IReviewDocument } from '../models/Review';
 import { OrderModel } from '../models/Order';
 import { IOrderDocument } from '../models/Order';
 import { closeMongo, connectMongo, getMongoConnectionState, pingMongo } from './mongo';
+import { runCatalogStartupMaintenance } from './catalogStartup';
 import { catalogSeed } from '../catalog/catalogSeed';
 import {
   getAvailablePurchaseStock,
@@ -30,6 +31,8 @@ import { makeDemoStockAllocationOperation, makeStockAllocationOperation } from '
 import { DEMO_RESERVATION_TTL_MS, isDemoModeEnabled, isNonProductionMongoTarget } from '../config/demoMode';
 import { getRazorpayConfig } from '../payments/razorpay';
 import { calculateReviewSummary } from '../reviews/reviewRules';
+import { isDatasetMutationAllowed } from '../config/datasetPolicy';
+import { safeErrorSummary } from '../utils/safeError';
 
 const DATASET_DIR = path.resolve(process.cwd(), 'dataset');
 const PUBLIC_DIR = path.resolve(process.cwd(), 'public');
@@ -280,8 +283,11 @@ class MongoDatabase {
 
   public async connect(): Promise<void> {
     await connectMongo();
-    await this.disableGeneratedLegacyProducts();
-    await this.seedCatalogIfMissing();
+    await runCatalogStartupMaintenance(
+      process.env.NODE_ENV,
+      () => this.disableGeneratedLegacyProducts(),
+      () => this.seedCatalogIfMissing(),
+    );
   }
 
   public async ping(): Promise<boolean> {
@@ -672,7 +678,7 @@ class MongoDatabase {
           result.updatedCount += batchPlan.updateProducts.length;
           result.skippedProducts.push(...batchPlan.skippedProducts, ...batchPlan.missingProducts);
         } catch (error) {
-          console.error('[Admin] Demo inventory bulk batch failed:', error instanceof Error ? error.name : 'Unknown error.');
+          console.error('[Admin] Demo inventory bulk batch failed:', safeErrorSummary(error));
           result.skippedProducts.push(...(batchPlan?.skippedProducts || []), ...(batchPlan?.missingProducts || []));
           const failedProducts = batchPlan?.updateProducts || batch;
           result.failedProducts.push(...failedProducts.map((product) => ({
@@ -1306,6 +1312,9 @@ class MongoDatabase {
   }
 
   public async syncDatasetProducts() {
+    if (!isDatasetMutationAllowed()) {
+      throw new Error('Dataset catalogue sync is disabled in production.');
+    }
     this.assertConnected();
     const files = fs.existsSync(DATASET_DIR)
       ? fs.readdirSync(DATASET_DIR).filter((file) => !file.startsWith('.') && /\.(csv|json)$/i.test(file))

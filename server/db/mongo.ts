@@ -1,21 +1,12 @@
 import mongoose from 'mongoose';
+import { safeErrorSummary } from '../utils/safeError';
 
 let listenersRegistered = false;
 
-const sanitizeMongoError = (error: unknown, uri = ''): string => {
-  if (!(error instanceof Error)) return 'Unknown MongoDB error.';
-  let message = error.message;
-  if (uri) message = message.replaceAll(uri, '[MongoDB URI redacted]');
-  message = message
-    .replace(/mongodb(?:\+srv)?:\/\/[^\s"'<>]+/gi, '[MongoDB URI redacted]')
-    .replace(/([a-zA-Z0-9._~-]+):([^@\s/]+)@/g, '[MongoDB credentials redacted]@');
-  const code = 'code' in error && (typeof error.code === 'string' || typeof error.code === 'number')
-    ? `, code ${error.code}`
-    : '';
-  return `${error.name}${code}: ${message}`;
-};
+export const formatMongoError = safeErrorSummary;
 
-export const formatMongoError = (error: unknown): string => sanitizeMongoError(error);
+export const shouldEnableAutoIndex = (nodeEnv = process.env.NODE_ENV): boolean =>
+  nodeEnv?.trim().toLowerCase() !== 'production';
 
 export const getMongoConnectionState = (): 'connected' | 'connecting' | 'disconnected' =>
   mongoose.connection.readyState === 1
@@ -33,7 +24,7 @@ export async function connectMongo(uri = process.env.MONGODB_URI?.trim() || ''):
     mongoose.connection.on('connected', () => console.info('[MongoDB] Connected.'));
     mongoose.connection.on('disconnected', () => console.error('[MongoDB] Connection lost.'));
     mongoose.connection.on('error', (error: Error) => {
-      console.error('[MongoDB] Connection error:', sanitizeMongoError(error, uri));
+      console.error('[MongoDB] Connection error:', safeErrorSummary(error));
     });
     listenersRegistered = true;
   }
@@ -47,7 +38,7 @@ export async function connectMongo(uri = process.env.MONGODB_URI?.trim() || ''):
         await mongoose.connect(uri, {
           serverSelectionTimeoutMS: 7000,
           connectTimeoutMS: 7000,
-          autoIndex: true,
+          autoIndex: shouldEnableAutoIndex(),
         });
       }
     }
@@ -56,7 +47,7 @@ export async function connectMongo(uri = process.env.MONGODB_URI?.trim() || ''):
     await database.admin().ping();
     console.info('[MongoDB] Ping succeeded.');
   } catch (error) {
-    const message = sanitizeMongoError(error, uri);
+    const message = safeErrorSummary(error);
     console.error('[MongoDB] Connection attempt failed:', message);
     throw new Error(`MongoDB connection failed: ${message}`, { cause: error });
   }
@@ -68,7 +59,7 @@ export async function pingMongo(): Promise<boolean> {
     await mongoose.connection.db.admin().ping();
     return true;
   } catch (error) {
-    console.error('[MongoDB] Ping failed:', sanitizeMongoError(error));
+    console.error('[MongoDB] Ping failed:', safeErrorSummary(error));
     return false;
   }
 }

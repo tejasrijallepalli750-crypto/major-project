@@ -198,7 +198,7 @@ async function startServer() {
     const retry = setInterval(() => {
       if (!db.isConnected) {
         void db.connect().catch((error: unknown) => {
-          console.error('[Server] MongoDB reconnect attempt failed:', error instanceof Error ? error.message : 'Unknown error.');
+          console.error('[Server] MongoDB reconnect attempt failed:', formatMongoError(error));
         });
       }
     }, 15000);
@@ -239,6 +239,6 @@ async function startServer() {
 }
 
 startServer().catch((error) => {
-  console.error('[Server] Fatal startup error:', error);
+  console.error('[Server] Fatal startup error:', formatMongoError(error));
   process.exit(1);
 });

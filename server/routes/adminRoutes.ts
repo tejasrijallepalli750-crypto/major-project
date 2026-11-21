@@ -3,6 +3,7 @@ import { db, getDatabaseErrorStatus, InventoryError } from '../db/database';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { isDemoModeEnabled } from '../config/demoMode';
 import { reconcileExpiredDemoReservations } from '../payments/demoReservationReconciler';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.post('/demo-inventory/bulk-enable', requireAuth, requireAdmin, async (_re
     if (error instanceof InventoryError) {
       return res.status(403).json({ success: false, message: error.message });
     }
-    console.error('[Admin] Demo inventory bulk update failed:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Admin] Demo inventory bulk update failed:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({
       success: false,
       message: 'Bulk demo inventory could not be completed.',
@@ -46,7 +47,7 @@ router.post('/demo-inventory/reconcile', requireAuth, requireAdmin, async (_req:
     const result = await reconcileExpiredDemoReservations();
     return res.json({ success: true, data: result });
   } catch (error) {
-    console.error('[Admin] Demo inventory reconciliation failed:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Admin] Demo inventory reconciliation failed:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({
       success: false,
       message: 'Expired demonstration reservations could not be reconciled.',

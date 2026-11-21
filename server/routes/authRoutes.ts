@@ -4,6 +4,7 @@ import { db, getDatabaseErrorStatus } from '../db/database';
 import { assertJwtConfigured, generateToken, requireAuth, AuthenticatedRequest } from '../middleware/auth';
 import { User } from '../../src/types';
 import { z } from 'zod';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 const addressFields = ['street', 'city', 'district', 'state', 'postalCode', 'country'] as const;
@@ -133,7 +134,7 @@ router.post('/register', async (req, res: Response) => {
       console.error('[Auth] Registration blocked because JWT_SECRET is not configured.');
       return res.status(503).json({ success: false, message: 'Authentication is not configured on the server.' });
     }
-    console.error('[Auth] Registration error:', error);
+    console.error('[Auth] Registration error:', safeErrorSummary(error));
     if ((error as { code?: number }).code === 11000) {
       return res.status(409).json({ success: false, message: 'An account with this email already exists.' });
     }
@@ -183,7 +184,7 @@ router.post('/login', async (req, res: Response) => {
       console.error('[Auth] Login blocked because JWT_SECRET is not configured.');
       return res.status(503).json({ success: false, message: 'Authentication is not configured on the server.' });
     }
-    console.error('[Auth] Login error:', error);
+    console.error('[Auth] Login error:', safeErrorSummary(error));
     const status = getDatabaseErrorStatus(error);
     return res.status(status).json({ success: false, message: status === 503 ? 'Database or authentication service is unavailable.' : 'Internal server error during login.' });
   }
@@ -276,7 +277,7 @@ router.put('/profile', requireAuth, async (req: AuthenticatedRequest, res: Respo
     const { password: _, ...userWithoutPassword } = updated;
     return res.json({ success: true, message: 'Profile updated successfully', user: userWithoutPassword });
   } catch (error) {
-    console.error('[Auth] Profile update error:', error);
+    console.error('[Auth] Profile update error:', safeErrorSummary(error));
     const status = getDatabaseErrorStatus(error);
     return res.status(status).json({ success: false, message: status === 503 ? 'Database is unavailable.' : 'Internal server error updating profile.' });
   }
@@ -286,7 +287,7 @@ router.get('/cart', requireAuth, async (req: AuthenticatedRequest, res: Response
   try {
     return res.json({ success: true, data: await db.getUserCart(req.user!.id) });
   } catch (error) {
-    console.error('[Auth] Cart retrieval error:', error);
+    console.error('[Auth] Cart retrieval error:', safeErrorSummary(error));
     const status = getDatabaseErrorStatus(error);
     return res.status(status).json({ success: false, message: status === 503 ? 'Database is unavailable.' : 'Unable to retrieve your cart.' });
   }
@@ -298,7 +299,7 @@ router.put('/cart', requireAuth, async (req: AuthenticatedRequest, res: Response
     return res.json({ success: true, data: await db.getUserCart(req.user!.id) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save your cart.';
-    console.error('[Auth] Cart save error:', error);
+    console.error('[Auth] Cart save error:', safeErrorSummary(error));
     return res.status(message.includes('invalid') || message.includes('unavailable') ? 400 : getDatabaseErrorStatus(error))
       .json({ success: false, message });
   }
@@ -308,7 +309,7 @@ router.get('/wishlist', requireAuth, async (req: AuthenticatedRequest, res: Resp
   try {
     return res.json({ success: true, data: await db.getUserWishlist(req.user!.id) });
   } catch (error) {
-    console.error('[Auth] Wishlist retrieval error:', error);
+    console.error('[Auth] Wishlist retrieval error:', safeErrorSummary(error));
     const status = getDatabaseErrorStatus(error);
     return res.status(status).json({ success: false, message: status === 503 ? 'Database is unavailable.' : 'Unable to retrieve your saved items.' });
   }
@@ -320,7 +321,7 @@ router.put('/wishlist', requireAuth, async (req: AuthenticatedRequest, res: Resp
     return res.json({ success: true, data: await db.getUserWishlist(req.user!.id) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save your items.';
-    console.error('[Auth] Wishlist save error:', error);
+    console.error('[Auth] Wishlist save error:', safeErrorSummary(error));
     return res.status(message.includes('Wishlist') ? 400 : getDatabaseErrorStatus(error)).json({ success: false, message });
   }
 });

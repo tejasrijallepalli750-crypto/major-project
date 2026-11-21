@@ -22,6 +22,7 @@ import {
   isDemoModeEnabled,
 } from '../config/demoMode';
 import { z } from 'zod';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 const paymentVerificationBodySchema = z.object({
@@ -324,7 +325,7 @@ const sendOrderConfirmationSafely = async (order: Order, userEmail: string): Pro
   try {
     await sendOrderConfirmation(order, userEmail);
   } catch (error) {
-    console.error('[Mailer] Order confirmation email failed:', error instanceof Error ? error.message : 'Unknown error.');
+    console.error('[Mailer] Order confirmation email failed:', safeErrorSummary(error));
   }
 };
 
@@ -624,7 +625,7 @@ router.post('/demo/complete', requireAuth, async (req: AuthenticatedRequest, res
       outcome,
     });
   } catch (error) {
-    console.error('[Payment] Local Demo processing error:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Local Demo processing error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Unable to record the Local Demo outcome.' });
   }
 });
@@ -679,7 +680,7 @@ router.post('/refresh-order-status', requireAuth, async (req: AuthenticatedReque
       if (paymentRefreshes.get(order.id) === refresh) paymentRefreshes.delete(order.id);
     }
   } catch (error) {
-    console.error('[Payment] Order payment status refresh failed:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Order payment status refresh failed:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({
       success: false,
       state: 'verification-pending',
@@ -771,7 +772,7 @@ router.post('/create-order', requireAuth, async (req: AuthenticatedRequest, res:
       data: paymentData(updatedOrder, updatedOrder.razorpayOrderId, config.keyId),
     });
   } catch (error) {
-    console.error('[Payment] Create order error:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Create order error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Unable to start the Razorpay checkout.' });
   }
 });
@@ -847,7 +848,7 @@ router.post('/retry-order', requireAuth, async (req: AuthenticatedRequest, res: 
       data: paymentData(order, order.razorpayOrderId, config.keyId),
     });
   } catch (error) {
-    console.error('[Payment] Retry order error:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Retry order error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Unable to verify this order for payment retry.' });
   }
 });
@@ -868,7 +869,7 @@ router.get('/cancellation-status/:orderId', requireAuth, async (req: Authenticat
       message: eligibility.canCancel ? undefined : eligibility.message,
     });
   } catch (error) {
-    console.error('[Payment] Order cancellation eligibility check failed:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Order cancellation eligibility check failed:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({
       success: false,
       message: 'Unable to verify whether this order can be safely cancelled.',
@@ -921,7 +922,7 @@ router.post('/cancel-order', requireAuth, async (req: AuthenticatedRequest, res:
     if (error instanceof OrderCancellationError) {
       return res.status(409).json({ success: false, message: error.message });
     }
-    console.error('[Payment] Order cancellation failed:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Order cancellation failed:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({
       success: false,
       message: 'Unable to safely cancel this order. The order and any reservation remain unchanged.',
@@ -1021,7 +1022,7 @@ router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res: Respo
     }
     return res.status(409).json({ success: false, message: 'Payment was captured but the order state could not be updated. Please contact support.' });
   } catch (error) {
-    console.error('[Payment] Verification error:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Verification error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Unable to verify payment.' });
   }
 });
@@ -1082,7 +1083,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
     }
     return res.status(409).json({ status: 'order_update_conflict' });
   } catch (error) {
-    console.error('[Payment] Webhook processing error:', error instanceof Error ? error.name : 'Unknown error.');
+    console.error('[Payment] Webhook processing error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ status: 'error' });
   }
 });

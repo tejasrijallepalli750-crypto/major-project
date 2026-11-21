@@ -8,6 +8,7 @@ import { getDatabaseErrorStatus, IdempotencyConflictError, InventoryError, Order
 import { isDemoModeEnabled } from '../config/demoMode';
 import { getRazorpayConfig } from '../payments/razorpay';
 import { z } from 'zod';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 
@@ -156,7 +157,7 @@ router.post('/validate-cart', async (req, res: Response) => {
       },
     });
   } catch (error) {
-    console.error('[Orders] Cart validation error:', error);
+    console.error('[Orders] Cart validation error:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({ success: false, message: 'Server error during cart validation.' });
   }
 });
@@ -319,7 +320,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
     if (error instanceof IdempotencyConflictError) {
       return res.status(409).json({ success: false, message: error.message });
     }
-    console.error('[Orders] Order creation error:', error);
+    console.error('[Orders] Order creation error:', safeErrorSummary(error));
     if (error instanceof InventoryError) {
       return res.status(409).json({ success: false, message: error.message });
     }
@@ -352,7 +353,7 @@ router.delete('/:id/customer-history', requireAuth, async (req: AuthenticatedReq
     }
     return res.json({ success: true, message: 'Order removed from your order history.' });
   } catch (error) {
-    console.error('[Orders] Customer order history removal failed:', error);
+    console.error('[Orders] Customer order history removal failed:', safeErrorSummary(error));
     return res.status(getDatabaseErrorStatus(error)).json({
       success: false,
       message: 'Failed to remove the order from your history.',

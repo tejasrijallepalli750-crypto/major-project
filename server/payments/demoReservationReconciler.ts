@@ -1,6 +1,7 @@
 import { db } from '../db/database';
 import { isDemoModeEnabled } from '../config/demoMode';
 import { getRazorpayConfig } from './razorpay';
+import { safeErrorSummary } from '../utils/safeError';
 
 interface RazorpayOrderPayments {
   items?: Array<{ status?: string }>;
@@ -24,16 +25,11 @@ export class DemoReservationReconciliationError extends Error {
     super(`Demo reservation reconciliation failed while ${stage}.`);
     this.name = 'DemoReservationReconciliationError';
     this.stage = stage;
-    this.sourceErrorName = sanitizedErrorName(error);
+    this.sourceErrorName = safeErrorSummary(error);
   }
 }
 
 let reconciliationInFlight = false;
-
-const sanitizedErrorName = (error: unknown): string => {
-  const name = error instanceof Error ? error.name : '';
-  return /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name) ? name : 'UnknownError';
-};
 
 export const canReleaseDemoReservation = (
   gatewayOrder: RazorpayOrderStatus,
@@ -140,8 +136,7 @@ export const reconcileExpiredDemoReservations = async (
           continue;
         }
       } catch (error) {
-        const errorName = sanitizedErrorName(error);
-        console.error(`[DemoInventory] ${gatewayStage} failed (${errorName}); reservation retained.`);
+        console.error(`[DemoInventory] ${gatewayStage} failed (${safeErrorSummary(error)}); reservation retained.`);
         retained += 1;
         continue;
       }

@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import { requireAuth, requireAdmin } from '../middleware/auth';
 import { SecurityTestResult } from '../../src/types';
 import { usesSharedOlistCatalogImage } from '../../src/utils/productPresentation';
+import { safeErrorSummary } from '../utils/safeError';
 
 const router = Router();
 
@@ -65,7 +66,7 @@ router.post('/run-suite', requireAuth, requireAdmin, async (_req: Request, res: 
       results,
     });
   } catch (error) {
-    console.error('[Tests] Database verification failed:', error);
+    console.error('[Tests] Database verification failed:', safeErrorSummary(error));
     return res.status(503).json({ success: false, message: 'Database verification could not complete.' });
   }
 });
