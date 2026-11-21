@@ -69,47 +69,63 @@ export interface PurchaseInventory {
   purchaseUnavailableReason?: string | null;
 }
 
+export interface PurchaseEligibility {
+  availableStock: number;
+  unavailableReason?: string;
+}
+
 export const isDemoPurchase = (product: PurchaseInventory): boolean =>
   product.demoModeEnabled === true && product.demoEligible === true;
 
-export const getAvailablePurchaseStock = (product: PurchaseInventory): number => {
-  if (product.status === 'inactive' || product.canPurchase === false) return 0;
-  if (isDemoPurchase(product)) {
-    if (product.demoPurchasingAvailable !== true) return 0;
-    const stock = product.demoStock;
-    return typeof stock === 'number' && Number.isSafeInteger(stock) && stock > 0 ? stock : 0;
+export const getPurchaseEligibility = (product: PurchaseInventory): PurchaseEligibility => {
+  if (product.status === 'inactive') {
+    return { availableStock: 0, unavailableReason: 'This product is currently inactive.' };
   }
-  return isInventoryVerified(product.inventoryStatus) && Number.isSafeInteger(product.stock) && product.stock > 0
-    ? product.stock
-    : 0;
+  if (isDemoPurchase(product)) {
+    if (product.demoPurchasingAvailable !== true) {
+      return {
+        availableStock: 0,
+        unavailableReason: 'Demonstration checkout is unavailable because server-side demo mode or Razorpay TEST setup is disabled.',
+      };
+    }
+    const stock = product.demoStock;
+    if (typeof stock !== 'number' || !Number.isSafeInteger(stock) || stock < 1) {
+      return {
+        availableStock: 0,
+        unavailableReason: 'No demonstration stock is available. An administrator must assign demo stock before purchase.',
+      };
+    }
+    return { availableStock: stock };
+  }
+  if (!isInventoryVerified(product.inventoryStatus)) {
+    return {
+      availableStock: 0,
+      unavailableReason: product.demoModeEnabled === undefined
+        ? 'The server did not provide purchase eligibility. Refresh the page; if this continues, restart the application server.'
+        : product.demoModeEnabled
+          ? 'This product is not selected for demonstration purchases. An administrator must enable it and assign demo stock.'
+          : 'Physical inventory is not verified, and demonstration purchasing is disabled by the server.',
+    };
+  }
+  if (!Number.isSafeInteger(product.stock) || product.stock < 1) {
+    return { availableStock: 0, unavailableReason: 'This product is out of stock.' };
+  }
+  return { availableStock: product.stock };
 };
+
+export const getAvailablePurchaseStock = (product: PurchaseInventory): number =>
+  product.canPurchase === true ? getPurchaseEligibility(product).availableStock : 0;
 
 export const getPurchaseUnavailableReason = (product: PurchaseInventory): string | undefined => {
   if (product.canPurchase === false) {
-    return product.purchaseUnavailableReason || 'This product is unavailable under the server inventory rules.';
+    return product.purchaseUnavailableReason
+      || getPurchaseEligibility(product).unavailableReason
+      || 'This product is unavailable under the server inventory rules.';
   }
-  if (product.status === 'inactive') return 'This product is currently inactive.';
-  if (isDemoPurchase(product)) {
-    if (product.demoPurchasingAvailable !== true) {
-      return 'Demonstration checkout is unavailable because server-side demo mode or Razorpay TEST setup is disabled.';
-    }
-    if (getAvailablePurchaseStock(product) < 1) {
-      return 'No demonstration stock is available. An administrator must assign demo stock before purchase.';
-    }
-    return undefined;
+  if (product.canPurchase !== true && product.status !== undefined) {
+    return 'The server did not provide purchase eligibility. Refresh the page; if this continues, restart the application server.';
   }
-
-  if (!isInventoryVerified(product.inventoryStatus)) {
-    if (product.demoModeEnabled === undefined) {
-      return 'The server did not provide purchase eligibility. Refresh the page; if this continues, restart the application server.';
-    }
-    if (product.demoModeEnabled) {
-      return 'This product is not selected for demonstration purchases. An administrator must enable it and assign demo stock.';
-    }
-    return 'Physical inventory is not verified, and demonstration purchasing is disabled by the server.';
-  }
-
-  return getAvailablePurchaseStock(product) < 1 ? 'This product is out of stock.' : undefined;
+  return getPurchaseEligibility(product).unavailableReason;
 };
 
 export const hasSimulatedOlistInventory = (

@@ -416,8 +416,7 @@ const refreshExistingRazorpayOrder = async (
     ? new Date(order.demoReservationExpiresAt).getTime()
     : NaN;
   const demoReservationUnavailable = order.purchaseMode === 'demo'
-    && (process.env.NODE_ENV === 'production'
-      || !isDemoModeEnabled()
+    && (!isDemoModeEnabled()
       || order.demoReservationStatus !== 'reserved'
       || !Number.isFinite(reservationExpiry)
       || reservationExpiry <= Date.now());
@@ -809,7 +808,7 @@ router.post('/retry-order', requireAuth, async (req: AuthenticatedRequest, res: 
       });
     }
     if (order.purchaseMode === 'demo') {
-      if (process.env.NODE_ENV === 'production' || !isDemoModeEnabled()) {
+      if (!isDemoModeEnabled()) {
         return res.status(503).json({ success: false, message: 'Demonstration payments are disabled by the server.' });
       }
       if (order.demoReservationStatus !== 'reserved'

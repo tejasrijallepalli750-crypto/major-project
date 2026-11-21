@@ -25,7 +25,12 @@ export interface DemoStockAllocationOperation {
     id: string;
     status: 'active';
     demoEligible: true;
-    demoStock: { $gte: number };
+    demoStock: {
+      $gte: number;
+      $lte: number;
+      $mod: [number, number];
+      $type: 'number';
+    };
   };
   update: {
     $inc: { demoStock: number };
@@ -36,11 +41,24 @@ export const makeDemoStockAllocationOperation = (
   productId: string,
   quantity: number,
 ): DemoStockAllocationOperation => {
-  if (!productId || !Number.isInteger(quantity) || quantity < 1) {
-    throw new RangeError('Demo stock allocation requires a product ID and a positive whole quantity.');
+  if (!productId || !Number.isSafeInteger(quantity) || quantity < 1) {
+    throw new RangeError('Demo stock allocation requires a product ID and a positive safe integer quantity.');
   }
   return {
-    filter: { id: productId, status: 'active', demoEligible: true, demoStock: { $gte: quantity } },
+    filter: {
+      id: productId,
+      status: 'active',
+      demoEligible: true,
+      demoStock: {
+        $gte: quantity,
+        $lte: Number.MAX_SAFE_INTEGER,
+        $mod: [1, 0],
+        $type: 'number',
+      },
+    },
     update: { $inc: { demoStock: -quantity } },
   };
 };
+
+export const getValidDemoStock = (value: unknown): number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;

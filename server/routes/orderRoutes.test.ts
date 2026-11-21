@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import test from 'node:test';
 import express from 'express';
 import { Order, Product, User } from '../../src/types';
-import { db, IdempotencyConflictError } from '../db/database';
+import { db, IdempotencyConflictError, InventoryError } from '../db/database';
 import { IOrderDocument, OrderModel } from '../models/Order';
 import { generateToken } from '../middleware/auth';
 import orderRoutes from './orderRoutes';
@@ -74,7 +74,14 @@ test('checkout idempotency keys follow checkout intent and remain stable for exa
 });
 
 test('order API authenticates, recalculates authoritative totals, and reuses idempotent submissions', async () => {
-  const environmentKeys = ['JWT_SECRET', 'DEMO_MODE_ENABLED', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'NODE_ENV'] as const;
+  const environmentKeys = [
+    'JWT_SECRET',
+    'DEMO_MODE_ENABLED',
+    'PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_KEY_SECRET',
+    'NODE_ENV',
+  ] as const;
   const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
   const originalFindUserById = db.findUserById;
   const originalFindProductById = db.findProductById;
@@ -127,6 +134,7 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
   process.env.JWT_SECRET = 'order-route-test-secret-that-is-at-least-32-characters';
   process.env.DEMO_MODE_ENABLED = 'false';
   process.env.NODE_ENV = 'development';
+  delete process.env.PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED;
   delete process.env.RAZORPAY_KEY_ID;
   delete process.env.RAZORPAY_KEY_SECRET;
   db.findUserById = async (id) => {
@@ -146,7 +154,7 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     createCalls += 1;
     if (order.purchaseMode === 'demo') {
       const demoQuantity = order.orderItems.reduce((sum, item) => sum + item.quantity, 0);
-      if (product.demoStock! < demoQuantity) throw new Error('Insufficient demo inventory in test allocation.');
+      if (product.demoStock! < demoQuantity) throw new InventoryError('Insufficient demo inventory in test allocation.');
       product.demoStock = product.demoStock! - demoQuantity;
     }
     const created: Order = {
@@ -392,6 +400,10 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     }, token, '88888888888888888888888888888888');
     assert.equal(insufficientDemoStock.status, 400);
     assert.equal(createCalls, 4);
+    product.demoStock = 1.5;
+    const invalidDemoStock = await send(demoPayload, token, 'dddddddddddddddddddddddddddddddd');
+    assert.equal(invalidDemoStock.status, 400);
+    assert.equal(createCalls, 4);
 
     product.demoStock = 3;
     const localDemoPayment = await send({
@@ -410,6 +422,35 @@ test('order API authenticates, recalculates authoritative totals, and reuses ide
     const productionDemo = await send(demoPayload, token, 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb');
     assert.equal(productionDemo.status, 409);
     assert.equal(createCalls, 4);
+    assert.equal(product.stock, 10);
+
+    process.env.PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED = 'true';
+    process.env.RAZORPAY_KEY_ID = 'rzp_test_production-order-route';
+    process.env.RAZORPAY_KEY_SECRET = 'production-order-route-test-secret';
+    const productionTestDemo = await send(demoPayload, token, 'cccccccccccccccccccccccccccccccc');
+    assert.equal(productionTestDemo.status, 201);
+    const productionDemoOrder = (await productionTestDemo.json() as { data: Order }).data;
+    assert.equal(productionDemoOrder.purchaseMode, 'demo');
+    assert.equal(product.stock, 10);
+    assert.equal(product.demoStock, 2);
+    assert.equal(createCalls, 5);
+
+    process.env.RAZORPAY_KEY_ID = 'rzp_live_production-order-route';
+    const liveProductionDemo = await send(demoPayload, token, 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee');
+    assert.equal(liveProductionDemo.status, 409);
+    assert.equal(createCalls, 5);
+
+    process.env.RAZORPAY_KEY_ID = 'rzp_test_production-order-route';
+    product.demoStock = 1;
+    const concurrentDemoOrders = await Promise.all([
+      send(demoPayload, token, 'ffffffffffffffffffffffffffffffff'),
+      send(demoPayload, secondCustomerToken, '10101010101010101010101010101010'),
+    ]);
+    const concurrentStatuses = concurrentDemoOrders.map((response) => response.status);
+    assert.equal(concurrentStatuses.filter((status) => status === 201).length, 1);
+    assert.ok(concurrentStatuses.filter((status) => status !== 201).every((status) => status === 400 || status === 409));
+    assert.equal(product.demoStock, 0);
+    assert.equal(product.stock, 10);
 
   } finally {
     server.close();

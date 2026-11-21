@@ -250,7 +250,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
       )}
       {hasDemoItems && (
         <p className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-xs leading-relaxed text-violet-800">
-          Demonstration inventory · Razorpay TEST payments only. No physical stock is represented by this demo quantity.
+          DEMO / TEST checkout only. Razorpay is in TEST mode: no real payment is collected, no physical stock is changed, and no shipment is promised.
         </p>
       )}
 
@@ -262,7 +262,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                  1. Delivery Address
+                  {hasDemoItems ? '1. Checkout Contact Details' : '1. Delivery Address'}
                 </h2>
                 {user && (
                   <span className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
@@ -574,7 +574,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({ onNavigate, onOrderS
               </span>
             </div>
             <div className="flex justify-between">
-              <span>Shipping Fee</span>
+              <span>{hasDemoItems ? 'Demo shipping calculation' : 'Shipping Fee'}</span>
               <span className="font-mono tabular-nums">
                 {shippingPrice === 0 ? <span className="text-emerald-700 font-semibold">FREE</span> : `₹${shippingPrice}`}
               </span>

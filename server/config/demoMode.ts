@@ -1,8 +1,14 @@
+import { getRazorpayConfig } from '../payments/razorpay';
+
 export const DEMO_RESERVATION_TTL_MS = 20 * 60 * 1000;
 
-export const isDemoModeEnabled = (environment: NodeJS.ProcessEnv = process.env): boolean =>
-  environment.DEMO_MODE_ENABLED?.trim().toLowerCase() === 'true'
-  && environment.NODE_ENV !== 'production';
+export const isDemoModeEnabled = (environment: NodeJS.ProcessEnv = process.env): boolean => {
+  if (environment.NODE_ENV?.trim().toLowerCase() === 'production') {
+    return environment.PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED?.trim().toLowerCase() === 'true'
+      && getRazorpayConfig(environment).isConfigured;
+  }
+  return environment.DEMO_MODE_ENABLED?.trim().toLowerCase() === 'true';
+};
 
 export const isNonProductionMongoTarget = (
   databaseName: string | undefined,

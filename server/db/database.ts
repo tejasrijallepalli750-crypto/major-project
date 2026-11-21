@@ -23,11 +23,18 @@ import { closeMongo, connectMongo, getMongoConnectionState, pingMongo } from './
 import { runCatalogStartupMaintenance } from './catalogStartup';
 import { catalogSeed } from '../catalog/catalogSeed';
 import {
-  getAvailablePurchaseStock,
-  getPurchaseUnavailableReason,
+  getPurchaseEligibility,
   isManagedOlistCatalogProduct,
 } from '../../src/utils/productPresentation';
-import { makeDemoStockAllocationOperation, makeStockAllocationOperation } from '../orders/inventory';
+import {
+  isDemoOrderStatusUpdateForbidden,
+  isDemoTestOrder,
+} from '../../src/utils/orderPresentation';
+import {
+  getValidDemoStock,
+  makeDemoStockAllocationOperation,
+  makeStockAllocationOperation,
+} from '../orders/inventory';
 import { DEMO_RESERVATION_TTL_MS, isDemoModeEnabled, isNonProductionMongoTarget } from '../config/demoMode';
 import { getRazorpayConfig } from '../payments/razorpay';
 import { calculateReviewSummary } from '../reviews/reviewRules';
@@ -103,7 +110,7 @@ const userFromDocument = (document: IUserDocument): User => ({
 
 export const productFromDocument = (document: IProductDocument): Product => {
   const demoModeEnabled = isDemoModeEnabled();
-  const demoStockValue = Number(document.demoStock || 0);
+  const demoStockValue = getValidDemoStock(document.demoStock);
   const product: Product = {
     id: String(document.id),
     name: String(document.name),
@@ -119,7 +126,7 @@ export const productFromDocument = (document: IProductDocument): Product => {
     demoModeEnabled,
     demoPurchasingAvailable: demoModeEnabled && getRazorpayConfig().isConfigured,
     demoEligible: document.demoEligible === true,
-    demoStock: Number.isSafeInteger(demoStockValue) && demoStockValue >= 0 ? demoStockValue : 0,
+    demoStock: demoStockValue,
     inventoryVerifiedAt: document.inventoryVerifiedAt
       ? normalizeDate(document.inventoryVerifiedAt as Date | string)
       : undefined,
@@ -130,11 +137,14 @@ export const productFromDocument = (document: IProductDocument): Product => {
     createdAt: normalizeDate(document.createdAt as Date | string | undefined),
     updatedAt: normalizeDate(document.updatedAt as Date | string | undefined),
   };
-  const canPurchase = product.status === 'active' && getAvailablePurchaseStock(product) > 0;
+  const purchaseEligibility = getPurchaseEligibility(product);
+  const canPurchase = product.status === 'active' && purchaseEligibility.availableStock > 0;
   return {
     ...product,
     canPurchase,
-    purchaseUnavailableReason: canPurchase ? null : getPurchaseUnavailableReason(product) || 'This product is not available for purchase.',
+    purchaseUnavailableReason: canPurchase
+      ? null
+      : purchaseEligibility.unavailableReason || 'This product is not available for purchase.',
   };
 };
 
@@ -385,6 +395,8 @@ class MongoDatabase {
         demoPurchasingAvailable: product.demoPurchasingAvailable,
         demoEligible: product.demoEligible,
         demoStock: product.demoStock,
+        canPurchase: product.canPurchase,
+        purchaseUnavailableReason: product.purchaseUnavailableReason,
       });
     }
     return items;
@@ -400,9 +412,11 @@ class MongoDatabase {
       }
       const product = await this.findProductById(item.productId);
       if (!product || product.status !== 'active') throw new Error(`Product ${item.productId} is unavailable.`);
-      const availableStock = isDemoModeEnabled() && product.demoEligible
-        ? product.demoStock || 0
-        : product.stock;
+      const availableStock = product.canPurchase
+        ? isDemoModeEnabled() && product.demoEligible
+          ? getValidDemoStock(product.demoStock)
+          : product.stock
+        : 0;
       if (availableStock > 0) valid.push({ productId: product.id, quantity: Math.min(item.quantity, availableStock) });
     }
     const result = await UserModel.updateOne({ id }, { $set: { cartItems: valid } });
@@ -744,6 +758,10 @@ class MongoDatabase {
     if (purchaseMode === 'demo' && !isDemoModeEnabled()) {
       throw new InventoryError('Demo inventory mode is disabled.');
     }
+    if (purchaseMode === 'demo'
+      && (order.paymentMethod !== 'Razorpay' || !getRazorpayConfig().isConfigured)) {
+      throw new InventoryError('Demo orders require valid Razorpay TEST credentials.');
+    }
     if (order.orderItems.some((item) => (item.purchaseMode ?? purchaseMode) !== purchaseMode)) {
       throw new InventoryError('Physical and demo inventory cannot be mixed in one order.');
     }
@@ -1026,7 +1044,7 @@ class MongoDatabase {
           if (current.paymentResult && current.paymentResult.status !== 'failed') {
             throw new OrderCancellationError('Payment verification is unresolved; the order and reservation remain unchanged.');
           }
-          if (current.purchaseMode === 'demo' && current.demoReservationStatus !== 'reserved') {
+          if (isDemoTestOrder(current) && current.demoReservationStatus !== 'reserved') {
             throw new OrderCancellationError('The demonstration reservation is no longer reserved.');
           }
         } else if (current.paymentMethod !== payment.method
@@ -1061,7 +1079,7 @@ class MongoDatabase {
           {
             $set: {
               status: 'Cancelled',
-              ...(current.purchaseMode === 'demo' ? { demoReservationStatus: 'released' } : {}),
+              ...(isDemoTestOrder(current) ? { demoReservationStatus: 'released' } : {}),
             },
           },
           { new: true, runValidators: true, session },
@@ -1073,7 +1091,7 @@ class MongoDatabase {
         for (const item of current.orderItems) {
           const restored = await ProductModel.updateOne(
             { id: item.product },
-            { $inc: current.purchaseMode === 'demo'
+            { $inc: isDemoTestOrder(current)
               ? { demoStock: item.quantity }
               : { stock: item.quantity } },
             { session },
@@ -1138,7 +1156,7 @@ class MongoDatabase {
             {
               $set: {
                 status: 'Cancelled',
-                ...(current.purchaseMode === 'demo' ? { demoReservationStatus: 'released' } : {}),
+                ...(isDemoTestOrder(current) ? { demoReservationStatus: 'released' } : {}),
               },
             },
             { new: true, runValidators: true, session },
@@ -1148,7 +1166,7 @@ class MongoDatabase {
           for (const item of current.orderItems) {
             const restored = await ProductModel.updateOne(
               { id: item.product },
-              { $inc: current.purchaseMode === 'demo'
+              { $inc: isDemoTestOrder(current)
                 ? { demoStock: item.quantity }
                 : { stock: item.quantity } },
               { session },
@@ -1169,6 +1187,12 @@ class MongoDatabase {
     if (!current) return undefined;
     if (current.status === 'Cancelled') {
       throw new OrderCancellationError('Cancelled orders cannot be reopened; create a new checkout order.');
+    }
+    if (status === 'Demo Completed') {
+      throw new OrderCancellationError('DEMO/TEST completion is assigned only after verified payment capture.');
+    }
+    if (isDemoOrderStatusUpdateForbidden(current, status)) {
+      throw new OrderCancellationError('DEMO/TEST order status is managed by payment verification and is not eligible for fulfillment.');
     }
     if (!current.isPaid && ['Processing', 'Shipped', 'Delivered'].includes(status)) {
       throw new OrderCancellationError('Unpaid orders cannot move into fulfillment.');
@@ -1256,9 +1280,13 @@ class MongoDatabase {
     const unsets: Record<string, number> = {};
     if (paymentResult.status === 'captured') {
       updates.paidAt = new Date();
-      updates.status = 'Processing';
-      const current = await OrderModel.findOne({ id: orderId }).select('purchaseMode').lean().exec();
-      if (current?.purchaseMode === 'demo') {
+      const current = await OrderModel.findOne({ id: orderId })
+        .select('purchaseMode orderItems.purchaseMode')
+        .lean()
+        .exec();
+      const isDemoOrder = current ? isDemoTestOrder(current) : false;
+      updates.status = isDemoOrder ? 'Demo Completed' : 'Processing';
+      if (isDemoOrder) {
         updates.demoReservationStatus = 'consumed';
         unsets.demoReservationExpiresAt = 1;
       }
@@ -1283,16 +1311,36 @@ class MongoDatabase {
 
   public async getAdminStats() {
     this.assertConnected();
-    const [paidOrders, orders, totalCustomers, totalProducts, lowStockCount] = await Promise.all([
-      OrderModel.find({ isPaid: true }).lean().exec(),
+    const demoOrderFilter = {
+      $or: [{ purchaseMode: 'demo' }, { 'orderItems.purchaseMode': 'demo' }],
+    };
+    const physicalOrderFilter = {
+      purchaseMode: { $ne: 'demo' },
+      'orderItems.purchaseMode': { $ne: 'demo' },
+    };
+    const [
+      paidOrders,
+      orders,
+      totalCustomers,
+      totalProducts,
+      lowStockCount,
+      totalOrders,
+      physicalOrdersCount,
+      demoOrdersCount,
+      demoPaidOrdersCount,
+    ] = await Promise.all([
+      OrderModel.find({ isPaid: true, ...physicalOrderFilter }).lean().exec(),
       OrderModel.find().sort({ createdAt: -1 }).limit(8).lean().exec(),
       UserModel.countDocuments({ role: 'customer' }),
       ProductModel.countDocuments(),
       ProductModel.countDocuments({ stock: { $lt: 10 }, status: 'active' }),
+      OrderModel.countDocuments(),
+      OrderModel.countDocuments(physicalOrderFilter),
+      OrderModel.countDocuments(demoOrderFilter),
+      OrderModel.countDocuments({ ...demoOrderFilter, isPaid: true }),
     ]);
-    const allPaidOrders = await OrderModel.find({ isPaid: true }).lean().exec();
     const categoryRevenue = new Map<string, number>();
-    for (const order of allPaidOrders) {
+    for (const order of paidOrders) {
       for (const item of order.orderItems) {
         const product = await this.findProductById(item.product);
         const category = product?.category || item.category || 'General';
@@ -1301,7 +1349,10 @@ class MongoDatabase {
     }
     return {
       totalSales: paidOrders.reduce((sum, order) => sum + order.totalPrice, 0),
-      totalOrders: await OrderModel.countDocuments(),
+      totalOrders,
+      physicalOrdersCount,
+      demoOrdersCount,
+      demoPaidOrdersCount,
       paidOrdersCount: paidOrders.length,
       totalCustomers,
       totalProducts,

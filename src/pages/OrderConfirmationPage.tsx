@@ -6,6 +6,7 @@ import { generateInvoicePDF } from '../utils/invoiceGenerator';
 import { ProductImage } from '../components/ProductImage';
 import { getCustomerProductName, isEstimatedOlistPrice } from '../utils/productPresentation';
 import { getOrderPaymentSummary } from '../utils/orderPaymentSummary';
+import { isDemoTestOrder } from '../utils/orderPresentation';
 import { BackButton } from '../components/BackButton';
 
 interface OrderConfirmationPageProps {
@@ -15,6 +16,7 @@ interface OrderConfirmationPageProps {
 
 export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ order, onNavigate }) => {
   const paymentSummary = getOrderPaymentSummary(order);
+  const isDemoOrder = isDemoTestOrder(order);
 
   useEffect(() => {
     // Fire celebratory confetti on verified order completion
@@ -44,14 +46,16 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
 
         <div className="space-y-1">
           <span className="text-xs uppercase font-bold tracking-widest text-emerald-700">
-            Order confirmed
+            {isDemoOrder ? 'DEMO / RAZORPAY TEST checkout' : 'Order confirmed'}
           </span>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Thank you for your order!
+            {isDemoOrder ? 'Your demonstration checkout is complete.' : 'Thank you for your order!'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
             Order <span className="font-mono font-bold text-slate-900">{order.orderNumber}</span>
-            {' is confirmed. You can follow its status from your account.'}
+            {isDemoOrder
+              ? ' is a TEST-only record. No real payment or physical shipment is promised.'
+              : ' is confirmed. You can follow its status from your account.'}
           </p>
         </div>
 
@@ -68,7 +72,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>Download invoice</span>
+            <span>{isDemoOrder ? 'Download demo receipt' : 'Download invoice'}</span>
           </button>
 
           <button
@@ -109,13 +113,20 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
           </div>
         </div>
 
-        {/* Shipping & Delivery Address */}
+        {/* Delivery address is only applicable to physical orders. */}
         <div className="bg-white rounded-2xl border border-slate-200/80 p-6 space-y-4">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-900 uppercase tracking-wider">
-            <MapPin className="w-4 h-4 text-blue-600" />
-            <span>Delivery address</span>
+            {isDemoOrder
+              ? <ShieldCheck className="w-4 h-4 text-violet-700" />
+              : <MapPin className="w-4 h-4 text-blue-600" />}
+            <span>{isDemoOrder ? 'DEMO / TEST order' : 'Delivery address'}</span>
           </div>
 
+          {isDemoOrder ? (
+            <p className="text-xs leading-relaxed text-violet-800">
+              No physical goods will be shipped. Checkout contact details are not used for delivery.
+            </p>
+          ) : (
           <div className="text-xs text-slate-600 space-y-1">
             <p className="font-bold text-slate-900">{order.shippingAddress.fullName}</p>
             <p>{order.shippingAddress.street}</p>
@@ -127,6 +138,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             <p className="text-slate-500">Phone: {order.shippingAddress.phone}</p>
             <p className="text-slate-500">Email: {order.user.email}</p>
           </div>
+          )}
         </div>
       </div>
 
@@ -177,7 +189,7 @@ export const OrderConfirmationPage: React.FC<OrderConfirmationPageProps> = ({ or
             <span className="font-mono">₹{order.taxPrice.toLocaleString('en-IN')}</span>
           </div>
           <div className="flex justify-between">
-            <span>Shipping:</span>
+            <span>{isDemoOrder ? 'Shipping (demo calculation):' : 'Shipping:'}</span>
             <span className="font-mono">
               {order.shippingPrice === 0 ? 'FREE' : `₹${order.shippingPrice}`}
             </span>

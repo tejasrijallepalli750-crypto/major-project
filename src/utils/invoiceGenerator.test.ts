@@ -59,3 +59,18 @@ test('invoice explains that estimated catalogue prices differ from charged order
   assert.equal(pdfContent.includes('OLIST-'), false);
   assert.equal(pdfContent.includes('Simulated demo stock'), false);
 });
+
+test('demo invoice identifies the TEST demonstration and omits delivery details', () => {
+  const order = createOrder(1);
+  order.purchaseMode = 'demo';
+  order.orderItems[0].purchaseMode = 'demo';
+  order.isPaid = true;
+  order.status = 'Demo Completed';
+  const pdfContent = createInvoiceDocument(order).output().replace(/\0/g, '');
+
+  assert.ok(pdfContent.includes('DEMO / TEST ORDER'));
+  assert.ok(pdfContent.includes('Razorpay TEST'));
+  assert.ok(pdfContent.includes('no shipment is promised'));
+  assert.equal(pdfContent.includes('Test Street'), false);
+  assert.equal(pdfContent.includes('Invoice Test'), false);
+});

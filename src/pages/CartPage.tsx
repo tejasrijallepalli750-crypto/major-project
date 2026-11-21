@@ -53,7 +53,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
       <BackButton onClick={() => onNavigate('catalog')} label="Continue Shopping" />
       {hasDemoItems && (
         <p className="rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-xs leading-relaxed text-violet-800">
-          Demonstration inventory · Razorpay TEST payments only. Demo quantities are separate from physical stock.
+          DEMO / TEST checkout only. No real payment is collected and no physical goods will be shipped. Demo quantities are separate from physical stock.
         </p>
       )}
       {/* Header */}
@@ -106,7 +106,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
                 </div>
                 {getAvailablePurchaseStock(item) < item.quantity && (
                   <p className="text-[11px] text-slate-500">
-                    This item can&apos;t be checked out right now. Remove it to continue.
+                    {item.purchaseUnavailableReason || "The server has not confirmed this item's purchase eligibility. Remove and add it again after refreshing the catalog."}
                   </p>
                 )}
                 {isEstimatedOlistPrice(item.sku) && (
@@ -165,7 +165,7 @@ export const CartPage: React.FC<CartPageProps> = ({ onNavigate }) => {
             </div>
 
             <div className="flex justify-between">
-              <span>Standard Insured Shipping</span>
+              <span>{hasDemoItems ? 'Demo shipping calculation' : 'Standard Insured Shipping'}</span>
               <span className="font-mono tabular-nums">
                 {shippingPrice === 0 ? (
                   <span className="text-emerald-700 font-semibold">FREE (Above ₹2,000)</span>

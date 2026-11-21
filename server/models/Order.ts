@@ -62,7 +62,7 @@ export interface IOrderDocument {
   paidAt?: Date;
   isDelivered: boolean;
   deliveredAt?: Date;
-  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled' | 'Demo Completed';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -146,7 +146,7 @@ const orderSchema = new Schema<IOrderDocument>(
     deliveredAt: { type: Date },
     status: {
       type: String,
-      enum: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'],
+      enum: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled', 'Demo Completed'],
       default: 'Pending',
     },
   },

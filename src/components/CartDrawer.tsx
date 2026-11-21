@@ -174,6 +174,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout, onExplore })
                   onCheckout();
                 }}
                 disabled={!canCheckout}
+                title={!canCheckout ? 'The server has not confirmed that every item is eligible for checkout.' : undefined}
                 className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <span>Proceed to Checkout</span>

@@ -9,6 +9,7 @@ import { isDemoModeEnabled } from '../config/demoMode';
 import { getRazorpayConfig } from '../payments/razorpay';
 import { z } from 'zod';
 import { safeErrorSummary } from '../utils/safeError';
+import { getValidDemoStock } from '../orders/inventory';
 
 const router = Router();
 
@@ -98,7 +99,7 @@ router.post('/validate-cart', async (req, res: Response) => {
         continue;
       }
       const availableStock = purchaseMode === 'demo'
-        ? product.demoStock || 0
+        ? getValidDemoStock(product.demoStock)
         : product.stock;
       if (purchaseMode === 'physical' && product.inventoryStatus !== 'verified') {
         errors.push(`"${product.name}" is unavailable because its inventory has not been physically verified.`);
@@ -133,7 +134,9 @@ router.post('/validate-cart', async (req, res: Response) => {
         demoModeEnabled: isDemoModeEnabled(),
         demoPurchasingAvailable: isDemoModeEnabled() && getRazorpayConfig().isConfigured,
         demoEligible: purchaseMode === 'demo',
-        demoStock: product.demoStock || 0,
+        demoStock: getValidDemoStock(product.demoStock),
+        canPurchase: true,
+        purchaseUnavailableReason: null,
         purchaseMode,
       });
     }
@@ -239,7 +242,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res: Response) =
       }
       const purchaseMode = isDemoModeEnabled() && product.demoEligible ? 'demo' : 'physical';
       const availableStock = purchaseMode === 'demo'
-        ? product.demoStock || 0
+        ? getValidDemoStock(product.demoStock)
         : product.stock;
       if (purchaseMode === 'physical' && product.inventoryStatus !== 'verified') {
         return res.status(409).json({

@@ -24,6 +24,7 @@ import { api } from '../services/api';
 import { Product, Order } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { generateInvoicePDF } from '../utils/invoiceGenerator';
+import { isDemoTestOrder } from '../utils/orderPresentation';
 import { isEstimatedOlistPrice } from '../utils/productPresentation';
 import { BackButton } from '../components/BackButton';
 
@@ -539,7 +540,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
         <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-900">
           {demoModeStatus === 'unknown'
             ? 'The application server did not report its demo-mode status. Restart it with the current project code before managing demo inventory.'
-            : 'Demo inventory management is disabled. In a non-production environment, set DEMO_MODE_ENABLED=true and restart the server. Production always blocks demo purchasing.'}
+            : 'Demo inventory management is disabled. In development, set DEMO_MODE_ENABLED=true. Production requires PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED=true and valid Razorpay TEST credentials; live credentials always disable it.'}
         </div>
       ) : !demoPurchasingAvailable ? (
         <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs leading-relaxed text-amber-900">
@@ -623,20 +624,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     ₹{stats.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    From {stats.paidOrdersCount} verified Razorpay transactions
+                    From {stats.paidOrdersCount} physical Razorpay transactions; DEMO/TEST payments are excluded
                   </div>
                 </div>
 
                 <div className="bg-white border border-slate-200/80 p-5 rounded-2xl space-y-2 shadow-xs">
                   <div className="flex items-center justify-between text-slate-500 text-xs">
-                    <span>Total Customer Orders</span>
+                    <span>Total Physical Orders</span>
                     <ShoppingBag className="w-4 h-4 text-blue-600" />
                   </div>
                   <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
-                    {stats.totalOrders}
+                    {stats.physicalOrdersCount}
                   </div>
                   <div className="text-[11px] text-slate-400">
-                    {orders.filter((o) => o.status === 'Delivered').length} orders fulfilled &amp; delivered
+                    {orders.filter((o) => !isDemoTestOrder(o) && o.status === 'Delivered').length} delivered · {stats.demoOrdersCount} DEMO/TEST orders excluded
+                  </div>
+                  <div className="text-[10px] text-violet-700">
+                    {stats.demoPaidOrdersCount} Razorpay TEST payments are not counted as sales
                   </div>
                 </div>
 
@@ -1070,9 +1074,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                               order.isPaid ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'
                             }`}
                           >
-                            {order.isPaid ? 'PAID (Razorpay Verified)' : 'PENDING PAYMENT'}
+                            {isDemoTestOrder(order)
+                              ? order.isPaid ? 'RAZORPAY TEST PAYMENT VERIFIED' : 'DEMO PAYMENT PENDING'
+                              : order.isPaid ? 'PAID (Razorpay Verified)' : 'PENDING PAYMENT'}
                           </span>
-                          {order.purchaseMode === 'demo' && (
+                          {isDemoTestOrder(order) && (
                             <span className="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-800">
                               DEMO · TEST ONLY
                             </span>
@@ -1081,7 +1087,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                         <p className="text-[11px] text-slate-400 mt-0.5">
                           Customer: {order.user.name} ({order.user.email}) · Placed: {new Date(order.createdAt).toLocaleString('en-IN')}
                         </p>
-                        {order.purchaseMode === 'demo' && order.demoReservationStatus === 'reserved' && order.demoReservationExpiresAt && (
+                        {isDemoTestOrder(order) && order.demoReservationStatus === 'reserved' && order.demoReservationExpiresAt && (
                           <p className="mt-1 text-[10px] text-violet-700">
                             Demo stock reservation expires {new Date(order.demoReservationExpiresAt).toLocaleString('en-IN')}
                           </p>
@@ -1090,18 +1096,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
 
                       {/* Fulfillment Status Control */}
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">Status:</span>
-                        <select
-                          value={order.status}
-                          onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                          className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 cursor-pointer"
-                        >
-                          <option value="Pending">Pending</option>
-                          <option value="Processing">Processing</option>
-                          <option value="Shipped">Shipped</option>
-                          <option value="Delivered">Delivered</option>
-                          <option value="Cancelled">Cancelled</option>
-                        </select>
+                        {isDemoTestOrder(order) ? (
+                          <span className="text-[11px] font-semibold text-violet-800">
+                            DEMO/TEST — fulfillment disabled
+                          </span>
+                        ) : (
+                          <>
+                            <span className="text-xs text-slate-500">Status:</span>
+                            <select
+                              value={order.status}
+                              onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                              className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-800 cursor-pointer"
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Processing">Processing</option>
+                              <option value="Shipped">Shipped</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </>
+                        )}
 
                         <button
                           onClick={() => generateInvoicePDF(order)}
@@ -1142,9 +1156,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                         </span>
                       </div>
                       <div>
-                        <span>Destination: </span>
+                        <span>{isDemoTestOrder(order) ? 'Order handling: ' : 'Destination: '}</span>
                         <span className="text-slate-700">
-                          {order.shippingAddress.city}, {order.shippingAddress.state} ({order.shippingAddress.postalCode})
+                          {isDemoTestOrder(order)
+                            ? 'DEMO/TEST only — no shipment'
+                            : `${order.shippingAddress.city}, ${order.shippingAddress.state} (${order.shippingAddress.postalCode})`}
                         </span>
                       </div>
                       <div>
@@ -1156,7 +1172,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                     </div>
                     <details className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
                       <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                        Inspect transaction and delivery details
+                        Inspect transaction and {isDemoTestOrder(order) ? 'checkout' : 'delivery'} details
                       </summary>
                       <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-200 pt-3 text-[11px] sm:grid-cols-2 lg:grid-cols-3">
                         <div>
@@ -1165,29 +1181,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onNavigate }) =>
                           <p className="break-words text-slate-700">{order.user.email}</p>
                           <p className="text-slate-700">Phone: {order.user.phone || 'Not provided'}</p>
                         </div>
-                        <div>
-                          <p className="font-semibold text-slate-500">Delivery contact</p>
-                          <p className="break-words text-slate-800">{order.shippingAddress.fullName}</p>
-                          <p className="break-words text-slate-700">{order.shippingAddress.email || order.user.email}</p>
-                          <p className="text-slate-700">Phone: {order.shippingAddress.phone}</p>
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-500">Complete delivery address</p>
-                          <p className="break-words text-slate-800">
-                            {[
-                              order.shippingAddress.street,
-                              order.shippingAddress.district,
-                              order.shippingAddress.city,
-                              order.shippingAddress.state,
-                              order.shippingAddress.postalCode,
-                              order.shippingAddress.country,
-                            ].filter(Boolean).join(', ')}
-                          </p>
-                        </div>
+                        {!isDemoTestOrder(order) && (
+                          <>
+                            <div>
+                              <p className="font-semibold text-slate-500">Delivery contact</p>
+                              <p className="break-words text-slate-800">{order.shippingAddress.fullName}</p>
+                              <p className="break-words text-slate-700">{order.shippingAddress.email || order.user.email}</p>
+                              <p className="text-slate-700">Phone: {order.shippingAddress.phone}</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-500">Complete delivery address</p>
+                              <p className="break-words text-slate-800">
+                                {[
+                                  order.shippingAddress.street,
+                                  order.shippingAddress.district,
+                                  order.shippingAddress.city,
+                                  order.shippingAddress.state,
+                                  order.shippingAddress.postalCode,
+                                  order.shippingAddress.country,
+                                ].filter(Boolean).join(', ')}
+                              </p>
+                            </div>
+                          </>
+                        )}
                         <div>
                           <p className="font-semibold text-slate-500">Order</p>
                           <p className="break-all text-slate-800">ID: {order.id}</p>
-                          <p className="text-slate-700">Status: {order.status}</p>
+                          <p className="text-slate-700">
+                            Status: {isDemoTestOrder(order) ? 'DEMO/TEST — not eligible for fulfillment' : order.status}
+                          </p>
                           <p className="text-slate-700">Placed: {new Date(order.createdAt).toLocaleString('en-IN')}</p>
                         </div>
                         <div>

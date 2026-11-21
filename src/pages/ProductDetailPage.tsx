@@ -300,7 +300,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           </div>
           {demoProduct && (
             <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-[11px] leading-relaxed text-violet-800">
-              Demonstration inventory · Razorpay TEST payment only. This quantity is separate from physical stock.
+              DEMO / TEST checkout only. No real payment is collected, physical stock is unchanged, and no shipment is promised.
             </div>
           )}
 
@@ -390,7 +390,7 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
               aria-label={canPurchase ? `Buy ${productName} now` : `Buy now unavailable: ${purchaseUnavailableReason}`}
               className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-40"
             >
-              Buy now
+              {demoProduct ? 'Start TEST demo checkout' : 'Buy now'}
             </button>
             {!canPurchase && purchaseUnavailableReason && (
               <p role="status" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
@@ -404,11 +404,11 @@ export const ProductDetailPage: React.FC<ProductDetailPageProps> = ({
           <div className="pt-4 border-t border-slate-100 space-y-2 text-xs text-slate-500">
             <div className="flex items-center gap-2">
               <Truck className="w-4 h-4 text-slate-700" />
-              <span>Complimentary shipping on orders above ₹2,000</span>
+              <span>{demoProduct ? 'No physical goods will be shipped' : 'Complimentary shipping on orders above ₹2,000'}</span>
             </div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-slate-700" />
-              <span>Secure payment confirmation</span>
+              <span>{demoProduct ? 'Razorpay TEST mode only' : 'Secure payment confirmation'}</span>
             </div>
           </div>
         </div>

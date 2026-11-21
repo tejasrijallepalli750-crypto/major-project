@@ -97,6 +97,41 @@ test('sends an escaped HTML order confirmation through the configured transport'
   assert.match(html, /1234567890/);
 });
 
+test('demo confirmation identifies Razorpay TEST and does not promise or disclose shipment details', async () => {
+  const originalEnvironment = new Map(smtpEnvironmentKeys.map((key) => [key, process.env[key]]));
+  process.env.SMTP_HOST = 'smtp.gmail.com';
+  process.env.SMTP_PORT = '465';
+  process.env.SMTP_USER = 'store@example.invalid';
+  process.env.SMTP_PASS = 'test-app-password';
+  process.env.MAIL_FROM = 'AURA Store <store@example.invalid>';
+  let sentMessage: Parameters<MailTransport['sendMail']>[0] | undefined;
+  const transport: MailTransport = {
+    sendMail: async (message) => {
+      sentMessage = message;
+      return mockSentMessageInfo;
+    },
+  };
+
+  try {
+    const order = createTestOrder();
+    order.purchaseMode = 'demo';
+    order.orderItems[0].purchaseMode = 'demo';
+    order.status = 'Demo Completed';
+    order.isPaid = true;
+    await sendOrderConfirmation(order, 'customer@example.invalid', transport);
+  } finally {
+    restoreEnvironment(originalEnvironment);
+  }
+
+  assert.ok(sentMessage);
+  assert.equal(sentMessage.subject, 'AURA Store DEMO · TEST checkout confirmation');
+  const html = String(sentMessage.html);
+  assert.match(html, /Razorpay TEST \(DEMO; no real charge\)/);
+  assert.match(html, /no shipment is promised/i);
+  assert.equal(html.includes('Shipping address'), false);
+  assert.equal(html.includes('Test Street'), false);
+});
+
 test('skips sending and warns when SMTP settings are incomplete', async () => {
   const originalEnvironment = new Map(smtpEnvironmentKeys.map((key) => [key, process.env[key]]));
   for (const key of smtpEnvironmentKeys) delete process.env[key];

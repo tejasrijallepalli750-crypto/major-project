@@ -147,6 +147,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 demoPurchasingAvailable: product.demoPurchasingAvailable,
                 demoEligible: product.demoEligible,
                 demoStock: product.demoStock,
+                canPurchase: product.canPurchase,
+                purchaseUnavailableReason: product.purchaseUnavailableReason,
               }
             : item
         );
@@ -168,6 +170,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
             demoPurchasingAvailable: product.demoPurchasingAvailable,
             demoEligible: product.demoEligible,
             demoStock: product.demoStock,
+            canPurchase: product.canPurchase,
+            purchaseUnavailableReason: product.purchaseUnavailableReason,
           },
         ];
       }

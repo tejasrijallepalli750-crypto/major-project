@@ -8,7 +8,7 @@ import {
   DemoReservationReconciliationError,
   reconcileExpiredDemoReservations,
 } from '../payments/demoReservationReconciler';
-import { makeDemoStockAllocationOperation, makeStockAllocationOperation } from './inventory';
+import { getValidDemoStock, makeDemoStockAllocationOperation, makeStockAllocationOperation } from './inventory';
 
 const makeExpiredDemoOrder = (overrides: Partial<Order> = {}): Order => ({
   id: 'ord-expired-demo-reservation-test',
@@ -53,6 +53,27 @@ test('demonstration inventory mode is disabled unless explicitly enabled', () =>
   assert.equal(isDemoModeEnabled({ DEMO_MODE_ENABLED: 'false' }), false);
   assert.equal(isDemoModeEnabled({ DEMO_MODE_ENABLED: 'true' }), true);
   assert.equal(isDemoModeEnabled({ DEMO_MODE_ENABLED: 'true', NODE_ENV: 'production' }), false);
+  const productionTestEnvironment = {
+    NODE_ENV: 'production',
+    PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED: 'true',
+    RAZORPAY_KEY_ID: 'rzp_test_production-demo',
+    RAZORPAY_KEY_SECRET: 'production-demo-test-secret',
+  };
+  assert.equal(isDemoModeEnabled(productionTestEnvironment), true);
+  assert.equal(isDemoModeEnabled({ ...productionTestEnvironment, PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED: 'false' }), false);
+  assert.equal(isDemoModeEnabled({ ...productionTestEnvironment, RAZORPAY_KEY_SECRET: '' }), false);
+  assert.equal(isDemoModeEnabled({ ...productionTestEnvironment, RAZORPAY_KEY_ID: 'rzp_live_production-demo' }), false);
+  assert.equal(isDemoModeEnabled({ ...productionTestEnvironment, RAZORPAY_KEY_ID: '' }), false);
+  assert.equal(isDemoModeEnabled({
+    ...productionTestEnvironment,
+    DEMO_MODE_ENABLED: 'true',
+    PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED: undefined,
+  }), false);
+  assert.equal(isDemoModeEnabled({
+    ...productionTestEnvironment,
+    PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED: 'true ',
+    RAZORPAY_KEY_SECRET: 'short',
+  }), false);
 });
 
 test('bulk demo inventory plans use bounded random stock and leave reserved products unchanged', () => {
@@ -129,7 +150,12 @@ test('demo stock allocation is separate and conditional on admin eligibility', (
       id: 'demo-product',
       status: 'active',
       demoEligible: true,
-      demoStock: { $gte: 3 },
+      demoStock: {
+        $gte: 3,
+        $lte: Number.MAX_SAFE_INTEGER,
+        $mod: [1, 0],
+        $type: 'number',
+      },
     },
     update: { $inc: { demoStock: -3 } },
   });
@@ -140,6 +166,21 @@ test('demo stock allocation is separate and conditional on admin eligibility', (
     stock: { $gte: 3 },
   });
   assert.throws(() => makeDemoStockAllocationOperation('demo-product', 0), RangeError);
+  assert.throws(
+    () => makeDemoStockAllocationOperation('demo-product', Number.MAX_SAFE_INTEGER + 1),
+    RangeError,
+  );
+});
+
+test('demo stock accepts only nonnegative safe integers and allocation remains atomic', () => {
+  assert.equal(getValidDemoStock(0), 0);
+  assert.equal(getValidDemoStock(4), 4);
+  for (const invalidStock of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1, '4', null, undefined]) {
+    assert.equal(getValidDemoStock(invalidStock), 0);
+  }
+  const allocation = makeDemoStockAllocationOperation('demo-product', 2);
+  assert.equal(allocation.filter.demoStock.$gte, 2);
+  assert.deepEqual(allocation.update.$inc, { demoStock: -2 });
 });
 
 test('expired demo reservations release only after no unresolved gateway payments remain', () => {

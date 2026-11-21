@@ -8,6 +8,7 @@ import { BackButton } from '../components/BackButton';
 import { RazorpayModal } from '../components/RazorpayModal';
 import { CheckPaymentStatusButton } from '../components/CheckPaymentStatusButton';
 import { OrderItemProductCard } from '../components/OrderItemProductCard';
+import { isDemoTestOrder } from '../utils/orderPresentation';
 import {
   canRequestOrderCancellation,
   getPaymentRetryVisibility,
@@ -278,6 +279,7 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
       ) : (
         <div className="space-y-4">
           {orders.map((order) => {
+            const isDemoOrder = isDemoTestOrder(order);
             const refreshedPayment = paymentRefreshStatus[order.id];
             const awaitingStatus = order.paymentMethod === 'Razorpay'
               && !order.isPaid
@@ -303,21 +305,35 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                     <span className="font-bold text-sm text-slate-900 font-mono">{order.orderNumber}</span>
                     <span
                       className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        order.status === 'Delivered'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : order.status === 'Processing'
-                          ? 'bg-blue-50 text-blue-700'
-                          : 'bg-amber-50 text-amber-700'
+                        isDemoOrder
+                          ? 'bg-violet-50 text-violet-800'
+                          : order.status === 'Delivered'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : order.status === 'Processing'
+                              ? 'bg-blue-50 text-blue-700'
+                              : 'bg-amber-50 text-amber-700'
                       }`}
                     >
-                      {order.status.toUpperCase()}
+                      {isDemoOrder
+                        ? order.isPaid ? 'TEST PAYMENT CAPTURED' : 'DEMO PAYMENT PENDING'
+                        : order.status.toUpperCase()}
                     </span>
-                    {order.isPaid && (
+                    {isDemoOrder && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-violet-100 text-violet-800">
+                        DEMO · RAZORPAY TEST
+                      </span>
+                    )}
+                    {order.isPaid && !isDemoOrder && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                        PAID · RAZORPAY VERIFIED
+                        {isDemoOrder ? 'TEST PAYMENT VERIFIED' : 'PAID · RAZORPAY VERIFIED'}
                       </span>
                     )}
                   </div>
+                  {isDemoOrder && (
+                    <p className="text-[11px] font-medium text-violet-800">
+                      Demonstration order only. It is not eligible for fulfillment and no shipment is promised.
+                    </p>
+                  )}
                   <p className="text-[11px] text-slate-400">
                     Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -365,7 +381,7 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
                     className="px-3.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
-                    <span>Download order invoice</span>
+                    <span>{isDemoOrder ? 'Download demo receipt' : 'Download order invoice'}</span>
                   </button>
                 </div>
               </div>
@@ -384,10 +400,18 @@ export const OrderHistoryPage: React.FC<OrderHistoryPageProps> = ({ onNavigate }
               {/* Bottom Row: Total & Delivery Info */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 text-xs text-slate-500">
                 <div className="truncate">
-                  <span>Shipping to: </span>
-                  <span className="font-semibold text-slate-700">
-                    {order.shippingAddress.fullName}, {order.shippingAddress.city} ({order.shippingAddress.postalCode})
-                  </span>
+                  {isDemoOrder ? (
+                    <span className="font-medium text-violet-800">
+                      No shipment promised. Checkout address is not used for delivery.
+                    </span>
+                  ) : (
+                    <>
+                      <span>Shipping to: </span>
+                      <span className="font-semibold text-slate-700">
+                        {order.shippingAddress.fullName}, {order.shippingAddress.city} ({order.shippingAddress.postalCode})
+                      </span>
+                    </>
+                  )}
                 </div>
                 <div className="text-right">
                   <span>Order total: </span>

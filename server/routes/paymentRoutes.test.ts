@@ -210,8 +210,15 @@ test('payment routes enforce authentication, ownership, demo outcomes, and unpai
   }
 });
 
-test('demo checkout creates a Razorpay order with supported fields and returns Checkout data', async () => {
-  const environmentKeys = ['JWT_SECRET', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'NODE_ENV', 'DEMO_MODE_ENABLED'] as const;
+test('production TEST demo checkout creates a Razorpay order with supported fields and returns Checkout data', async () => {
+  const environmentKeys = [
+    'JWT_SECRET',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_KEY_SECRET',
+    'NODE_ENV',
+    'DEMO_MODE_ENABLED',
+    'PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED',
+  ] as const;
   const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
   const originalFindUserById = db.findUserById;
   const originalFindOrderById = db.findOrderById;
@@ -265,8 +272,9 @@ test('demo checkout creates a Razorpay order with supported fields and returns C
   process.env.JWT_SECRET = 'create-payment-route-test-secret-at-least-32-characters';
   process.env.RAZORPAY_KEY_ID = 'rzp_test_create-payment-key';
   process.env.RAZORPAY_KEY_SECRET = 'create-payment-route-test-secret';
-  process.env.NODE_ENV = 'development';
-  process.env.DEMO_MODE_ENABLED = 'true';
+  process.env.NODE_ENV = 'production';
+  process.env.DEMO_MODE_ENABLED = 'false';
+  process.env.PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED = 'true';
   db.findUserById = async (id) => id === user.id ? user : undefined;
   db.findOrderById = async (id) => id === order.id ? order : undefined;
   db.updateOrderRazorpayId = async (orderId, createdOrderId, expiresAt) => {
@@ -508,7 +516,14 @@ test('Razorpay order persistence failure reports safely and retains the demo res
 });
 
 test('customers can retry only their own eligible Razorpay order using the verified existing gateway order', async () => {
-  const environmentKeys = ['JWT_SECRET', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'NODE_ENV', 'DEMO_MODE_ENABLED'] as const;
+  const environmentKeys = [
+    'JWT_SECRET',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_KEY_SECRET',
+    'NODE_ENV',
+    'DEMO_MODE_ENABLED',
+    'PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED',
+  ] as const;
   const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
   const originalFindUserById = db.findUserById;
   const originalFindOrderById = db.findOrderById;
@@ -583,6 +598,7 @@ test('customers can retry only their own eligible Razorpay order using the verif
   process.env.RAZORPAY_KEY_SECRET = 'payment-retry-route-test-secret';
   process.env.NODE_ENV = 'development';
   process.env.DEMO_MODE_ENABLED = 'true';
+  delete process.env.PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED;
   db.findUserById = async (id) => id === user.id ? user : id === otherCustomer.id ? otherCustomer : undefined;
   db.findOrderById = async (id) => id === currentOrder.id ? currentOrder : undefined;
   Object.defineProperty(Razorpay.prototype, 'addResources', {
@@ -750,7 +766,14 @@ test('customers can retry only their own eligible Razorpay order using the verif
 });
 
 test('customers can refresh authoritative Razorpay status and retry only a verified open failed order', async () => {
-  const environmentKeys = ['JWT_SECRET', 'RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'NODE_ENV', 'DEMO_MODE_ENABLED'] as const;
+  const environmentKeys = [
+    'JWT_SECRET',
+    'RAZORPAY_KEY_ID',
+    'RAZORPAY_KEY_SECRET',
+    'NODE_ENV',
+    'DEMO_MODE_ENABLED',
+    'PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED',
+  ] as const;
   const originalEnvironment = new Map(environmentKeys.map((key) => [key, process.env[key]]));
   const originalFindUserById = db.findUserById;
   const originalFindOrderById = db.findOrderById;
@@ -850,6 +873,7 @@ test('customers can refresh authoritative Razorpay status and retry only a verif
   process.env.RAZORPAY_KEY_SECRET = 'payment-refresh-test-secret';
   process.env.NODE_ENV = 'development';
   process.env.DEMO_MODE_ENABLED = 'true';
+  delete process.env.PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED;
   db.findUserById = async (id) => id === user.id ? user : id === otherCustomer.id ? otherCustomer : undefined;
   db.findOrderById = async (id) => id === currentOrder.id ? currentOrder : undefined;
   db.updateOrderPayment = async (_orderId, updatedPayment) => {
@@ -858,7 +882,7 @@ test('customers can refresh authoritative Razorpay status and retry only a verif
       ...currentOrder,
       paymentResult: updatedPayment,
       isPaid: updatedPayment.status === 'captured',
-      status: updatedPayment.status === 'captured' ? 'Processing' : 'Pending',
+      status: updatedPayment.status === 'captured' ? 'Demo Completed' : 'Pending',
       ...(updatedPayment.status === 'captured' && currentOrder.purchaseMode === 'demo'
         ? { demoReservationStatus: 'consumed', demoReservationExpiresAt: undefined }
         : {}),
@@ -1107,7 +1131,7 @@ test('customers can refresh authoritative Razorpay status and retry only a verif
     assert.equal(capturedBody.state, 'paid');
     assert.equal(capturedBody.message, 'Payment successful.');
     assert.equal(capturedBody.order.isPaid, true);
-    assert.equal(capturedBody.order.status, 'Processing');
+    assert.equal(capturedBody.order.status, 'Demo Completed');
     assert.equal(capturedBody.order.demoReservationStatus, 'consumed');
     assert.equal(paymentFetchCalls, 1);
     assert.equal(orderCreateCalls, 0);
@@ -1438,7 +1462,7 @@ test('authenticated demo customers are paid only after valid signature and captu
       ...currentOrder,
       paymentResult: result,
       isPaid: result.status === 'captured',
-      status: result.status === 'captured' ? 'Processing' : currentOrder.status,
+      status: result.status === 'captured' ? 'Demo Completed' : currentOrder.status,
     };
     return currentOrder;
   };

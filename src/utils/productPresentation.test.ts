@@ -40,6 +40,7 @@ test('purchase availability uses only the explicitly selected inventory source',
     demoEligible: true,
     demoPurchasingAvailable: true,
     demoStock: 3,
+    canPurchase: true,
   }), 3);
   assert.equal(getAvailablePurchaseStock({
     stock: 20,
@@ -48,8 +49,23 @@ test('purchase availability uses only the explicitly selected inventory source',
     demoEligible: true,
     demoPurchasingAvailable: false,
     demoStock: 3,
+    canPurchase: true,
   }), 0);
-  assert.equal(getAvailablePurchaseStock({ stock: 2, inventoryStatus: 'verified' }), 2);
+  assert.equal(getAvailablePurchaseStock({
+    stock: 2,
+    inventoryStatus: 'verified',
+    canPurchase: true,
+  }), 2);
+  assert.equal(getAvailablePurchaseStock({
+    stock: 2,
+    inventoryStatus: 'verified',
+    status: 'active',
+  }), 0);
+  assert.match(getPurchaseUnavailableReason({
+    stock: 2,
+    inventoryStatus: 'verified',
+    status: 'active',
+  }) || '', /server did not provide purchase eligibility/i);
 });
 
 test('purchase controls explain why unavailable inventory cannot be purchased', () => {

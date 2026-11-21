@@ -86,6 +86,8 @@ export interface CartItem {
   demoPurchasingAvailable?: boolean;
   demoEligible?: boolean;
   demoStock?: number;
+  canPurchase?: boolean;
+  purchaseUnavailableReason?: string | null;
   purchaseMode?: 'physical' | 'demo';
 }
 
@@ -162,7 +164,7 @@ export interface Order {
   paidAt?: string;
   isDelivered: boolean;
   deliveredAt?: string;
-  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled';
+  status: 'Pending' | 'Processing' | 'Shipped' | 'Delivered' | 'Cancelled' | 'Demo Completed';
   createdAt: string;
   updatedAt: string;
 }
