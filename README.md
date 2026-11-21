@@ -1,169 +1,629 @@
-AURA — E-Commerce Website with Payment Gateway
-AURA is a full-stack e-commerce web application built as a B.Tech major project. It includes a product catalogue, customer accounts, shopping cart, order management, an admin dashboard, and Razorpay payment integration in TEST mode.
-Payment and fulfilment notice: Razorpay TEST payments are for demonstration and development only. A successful demo/test checkout is not a real purchase, does not collect a real payment, and does not promise physical shipment. Physical purchasing must use inventory that has been explicitly verified by an administrator.
+# AURA – E-Commerce Website with Payment Gateway
 
-Project Links
-- GitHub Repository: https://github.com/tejasrijallepalli750-crypto/major-project
-- Live Application: https://aura-store-e33i.onrender.com
-- Hosting: Render
-Features
-Customer Experience
-- Browse and view product details.
-- Search and explore the product catalogue.
-- Add eligible products to the shopping cart and manage quantities.
-- Register, sign in, and access customer account features.
-- Place orders through the checkout flow when the product and inventory are eligible.
-- View order history, order details, and order confirmations.
-- Generate order invoices and receipts.
-Administration
-- Admin-protected dashboard and management routes.
-- Manage product and inventory information.
-- Review customer orders and their payment/order status.
-- Physical inventory must be explicitly verified before physical purchases are allowed.
-Payments and Demo Checkout
-- Razorpay integration using TEST credentials (rzp_test_...).
-- Server-side payment signature and payment/order checks.
-- Separate physical stock and demonstration stock.
-- Explicitly labelled TEST/DEMO orders.
-- Demo orders are not physical fulfilment orders and must not be shipped.
-- Production demo checkout is disabled by default and requires an explicit server-side opt-in.
-Technology Stack
-Layer	Technology
-Frontend	React, TypeScript, Vite
-Styling	Tailwind CSS and utility-based styling
-Backend	Node.js, Express, TypeScript
-Database	MongoDB with Mongoose
-Authentication	JWT-based authentication and role checks
-Payment Gateway	Razorpay (TEST mode)
-Hosting	Render
-Source Control	Git and GitHub
+AURA is a full-stack e-commerce web application developed as a B.Tech major project. It provides an online shopping platform where customers can browse products, view product details, manage shopping carts, place orders and experience a payment gateway workflow.
 
-Application Structure
-The repository is organised around the frontend, backend, and shared application types.
+The application combines a responsive React frontend, a Node.js and Express backend, MongoDB database integration, authentication, inventory management, order processing and Razorpay payment gateway integration.
+
+**Live Application:** https://aura-store-e33i.onrender.com
+
+**GitHub Repository:** https://github.com/tejasrijallepalli750-crypto/major-project
+
+---
+
+## Table of Contents
+
+1. Project Overview
+2. Project Objectives
+3. Features
+4. Technology Stack
+5. System Architecture
+6. Project Structure
+7. Application Modules
+8. Database Design
+9. Authentication and Security
+10. Inventory Management
+11. Payment Gateway Integration
+12. Installation and Setup
+13. Environment Configuration
+14. Running the Application
+15. Testing and Validation
+16. Deployment
+17. Future Enhancements
+18. Learning Outcomes
+19. Conclusion
+
+---
+
+## 1. Project Overview
+
+AURA is an online shopping application designed to provide customers with a convenient and user-friendly e-commerce experience.
+
+The platform supports product browsing, customer authentication, shopping cart management, checkout, order processing, payment integration and administrative management.
+
+The project follows a full-stack architecture in which the frontend communicates with backend REST APIs, while MongoDB stores application information.
+
+Razorpay is integrated in TEST mode to demonstrate the payment workflow without processing real customer payments.
+
+## 2. Project Objectives
+
+The main objectives of AURA are:
+
+- To develop a complete full-stack e-commerce application.
+- To provide an interactive and responsive shopping interface.
+- To implement secure customer registration and login.
+- To develop REST APIs for product, customer, cart and order operations.
+- To integrate MongoDB for persistent data storage.
+- To implement inventory and stock management.
+- To integrate Razorpay for payment gateway testing.
+- To provide an administrative dashboard.
+- To implement order history and invoice generation.
+- To deploy the application on a cloud hosting platform.
+
+## 3. Features
+
+### Customer Features
+
+- Customer registration and login.
+- Responsive shopping interface.
+- Product catalogue and product detail pages.
+- Product search and category browsing.
+- Shopping cart management.
+- Add products to cart and update quantities.
+- Buy Now functionality for eligible products.
+- Checkout and order creation.
+- Razorpay TEST payment workflow.
+- Order history and order details.
+- Order confirmation.
+- Invoice generation.
+
+### Product Management
+
+- Product information management.
+- Product images and descriptions.
+- Product categories and prices.
+- Product availability management.
+- Active and inactive product status.
+- Product inventory validation.
+
+### Admin Features
+
+- Secure administrator authentication.
+- Administrative dashboard.
+- Product management.
+- Inventory management.
+- Order management.
+- Customer order information.
+- Payment and order status information.
+
+### Payment Features
+
+- Razorpay payment gateway integration.
+- Razorpay TEST mode support.
+- Server-side payment order creation.
+- Payment signature verification.
+- Payment amount and currency validation.
+- Order ownership verification.
+- Payment status reconciliation.
+
+### Additional Features
+
+- Email notifications for supported order events.
+- Invoice and receipt generation.
+- Separate physical and demonstration inventory.
+- Server-side request validation.
+- Error handling and API protection.
+- Automated tests for important application workflows.
+
+## 4. Technology Stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React.js, TypeScript |
+| Build Tool | Vite |
+| Styling | Tailwind CSS, CSS |
+| Backend | Node.js, Express.js |
+| Programming Language | TypeScript, JavaScript |
+| Database | MongoDB |
+| ODM | Mongoose |
+| Authentication | JWT-based authentication |
+| Payment Gateway | Razorpay TEST API |
+| API Communication | REST APIs |
+| Version Control | Git and GitHub |
+| Deployment | Render |
+| Development Environment | Visual Studio Code |
+
+## 5. System Architecture
+
+AURA follows a full-stack client-server architecture.
+
+### Frontend Layer
+
+The frontend is developed using React and TypeScript. It provides the user interface for customers and administrators.
+
+It communicates with the backend through REST API requests.
+
+### Backend Layer
+
+The backend uses Node.js and Express.js to handle:
+
+- Authentication and authorization.
+- Product operations.
+- Cart and order operations.
+- Inventory validation.
+- Payment order creation.
+- Payment verification.
+- Administrative operations.
+
+### Database Layer
+
+MongoDB provides persistent storage for application data.
+
+Mongoose is used to define schemas, models and database operations.
+
+### Payment Layer
+
+Razorpay is integrated to demonstrate secure payment processing using TEST credentials.
+
+The backend is responsible for payment order creation and verification.
+
+### Architecture Flow
+
+```text
+Customer / Administrator
+          |
+          v
+    React Frontend
+          |
+          v
+      REST APIs
+          |
+          v
+   Node.js + Express
+          |
+     +----+----+
+     |         |
+     v         v
+  MongoDB   Razorpay
+ Database   TEST API
+     |         |
+     +----+----+
+          |
+          v
+   Order Processing
+          |
+          v
+   Frontend Response
+```
+
+## 6. Project Structure
+
+The project is organised into frontend, backend, database, configuration, testing and utility modules.
+
+```text
 major-project/
-├── server/                  # Express API, database, models, routes and services
-│   ├── config/              # Server configuration and feature gates
-│   ├── db/                  # MongoDB connection and database operations
-│   ├── email/               # Transactional email helpers
-│   ├── middleware/          # Authentication and request middleware
-│   ├── models/              # Mongoose models
-│   ├── orders/              # Order and inventory operations
-│   ├── payments/            # Razorpay integration and payment helpers
-│   └── routes/              # API routes
-├── src/                     # React frontend
-│   ├── components/          # Reusable UI components
-│   ├── context/             # Shared frontend state
-│   ├── pages/               # Application pages
-│   ├── services/            # API client and service functions
-│   ├── types/               # Shared TypeScript types
-│   └── utils/               # Presentation and invoice utilities
-├── scripts/                 # Project maintenance and data scripts
-├── server.ts                # Backend server entry point
+│
+├── public/
+│
+├── src/
+│   ├── components/
+│   │   ├── CartDrawer.tsx
+│   │   ├── ProductCard.tsx
+│   │   └── ...
+│   │
+│   ├── context/
+│   │   └── CartContext.tsx
+│   │
+│   ├── pages/
+│   │   ├── ProductDetailPage.tsx
+│   │   ├── CartPage.tsx
+│   │   ├── CheckoutPage.tsx
+│   │   ├── OrderHistoryPage.tsx
+│   │   ├── OrderConfirmationPage.tsx
+│   │   ├── AdminDashboard.tsx
+│   │   └── ...
+│   │
+│   ├── services/
+│   │   └── api.ts
+│   │
+│   ├── types/
+│   │
+│   └── utils/
+│       ├── invoiceGenerator.ts
+│       ├── productPresentation.ts
+│       └── orderPresentation.ts
+│
+├── server/
+│   ├── config/
+│   │
+│   ├── db/
+│   │   ├── database.ts
+│   │   ├── mongo.ts
+│   │   └── ...
+│   │
+│   ├── email/
+│   │
+│   ├── middleware/
+│   │
+│   ├── models/
+│   │
+│   ├── orders/
+│   │
+│   ├── payments/
+│   │
+│   ├── routes/
+│   │
+│   └── utils/
+│
+├── scripts/
+│
+├── server.ts
 ├── package.json
-└── vite.config.ts
+├── package-lock.json
+├── vite.config.ts
+├── tsconfig.json
+├── .env.example
+├── .gitignore
+└── README.md
+```
 
+## 7. Application Modules
 
-Getting Started
-Prerequisites
-Install the following before running the project locally:
-- Node.js (use a current LTS release where possible).
-- npm.
-- A MongoDB database that you control.
-- Razorpay TEST account credentials for testing payment flows.
-1. Clone the Repository
+### 7.1 User Authentication Module
+
+This module handles customer registration, login and authenticated access.
+
+It uses JWT-based authentication and role-based authorization to protect restricted application functionality.
+
+### 7.2 Product Module
+
+This module provides product information through backend APIs.
+
+It supports product listing, individual product details, categories, availability and product management.
+
+### 7.3 Shopping Cart Module
+
+The cart module allows customers to manage selected products and quantities before checkout.
+
+It calculates cart totals and validates product purchase eligibility.
+
+### 7.4 Order Management Module
+
+The order module handles order creation, order details, customer order history and administrative order operations.
+
+It validates stock availability before creating purchase orders.
+
+### 7.5 Inventory Management Module
+
+The inventory module manages physical inventory separately from demonstration inventory.
+
+It uses backend validation and conditional stock allocation to prevent invalid purchases and overselling.
+
+### 7.6 Payment Module
+
+The payment module integrates Razorpay TEST mode.
+
+It creates payment orders, verifies payment signatures and checks payment amounts and currencies.
+
+### 7.7 Invoice Module
+
+The invoice module generates order-related invoices and receipts.
+
+Demonstration orders are clearly identified as TEST/DEMO orders.
+
+### 7.8 Admin Module
+
+The admin module provides protected interfaces for managing products, inventory and customer orders.
+
+## 8. Database Design
+
+MongoDB is used as the primary database.
+
+The application uses Mongoose schemas and models to manage structured application information.
+
+The main collections include:
+
+| Collection | Purpose |
+|---|---|
+| `aurausers` | Customer and administrator accounts |
+| `auraproducts` | Product catalogue and inventory |
+| `auraorders` | Customer orders and payment information |
+| `aurareviews` | Product reviews |
+
+The database contains product information, customer account information, order records, inventory details and related application data.
+
+## 9. Authentication and Security
+
+Security is an important part of the AURA application.
+
+Implemented security features include:
+
+- JWT-based authentication.
+- Role-based access control.
+- Protected administrative routes.
+- Server-side input validation.
+- Order ownership checks.
+- Environment-based configuration.
+- Payment signature verification.
+- Payment amount and currency validation.
+- Conditional inventory allocation.
+- Separate physical and demonstration inventory.
+- Safe handling of application errors.
+
+Sensitive credentials are stored in environment variables and must not be committed to the GitHub repository.
+
+## 10. Inventory Management
+
+AURA maintains separate mechanisms for physical inventory and demonstration inventory.
+
+### Physical Inventory
+
+Physical product purchases require:
+
+- An active product.
+- Explicitly verified inventory.
+- Sufficient physical stock.
+- Successful backend inventory validation.
+
+Physical stock allocation is handled by the backend.
+
+### Demonstration Inventory
+
+Demonstration purchasing uses a separate `demoStock` value.
+
+It does not modify physical stock or mark physical inventory as verified.
+
+Demo purchases are explicitly labelled and excluded from physical fulfilment.
+
+The production demonstration checkout feature is disabled by default and requires explicit server-side configuration.
+
+## 11. Payment Gateway Integration
+
+Razorpay is integrated into AURA to demonstrate the online payment workflow.
+
+### Payment Workflow
+
+```text
+Customer selects product
+          |
+          v
+     Checkout Page
+          |
+          v
+   Backend Order Creation
+          |
+          v
+ Razorpay TEST Order Creation
+          |
+          v
+  Customer Payment Interface
+          |
+          v
+   Payment Confirmation
+          |
+          v
+ Server-Side Signature Verification
+          |
+          v
+ Payment Amount and Currency Check
+          |
+          v
+    Order Status Update
+```
+
+### Payment Security
+
+The application performs server-side verification of payment details.
+
+The frontend payment response alone is not considered sufficient proof of successful payment.
+
+### TEST Mode Notice
+
+AURA uses Razorpay TEST credentials for demonstration.
+
+- TEST payments do not collect real money.
+- Demo orders are not genuine commercial purchases.
+- Demo inventory is independent of physical stock.
+- Demo orders do not promise shipment or physical delivery.
+- Live payment credentials must not be used to activate demo purchasing.
+
+## 12. Installation and Setup
+
+### Prerequisites
+
+Before installing the project, ensure that the following are available:
+
+- Node.js
+- npm
+- MongoDB or a MongoDB Atlas database
+- Git
+- Visual Studio Code
+- Razorpay TEST account credentials for payment testing
+
+### Step 1: Clone the Repository
+
+```bash
 git clone https://github.com/tejasrijallepalli750-crypto/major-project.git
+```
+
+### Step 2: Open the Project
+
+```bash
 cd major-project
+```
 
+### Step 3: Install Dependencies
 
-2. Install Dependencies
+```bash
 npm install
+```
 
+### Step 4: Configure Environment Variables
 
-3. Configure Environment Variables
-Create a local .env file in the project root. Use your own development database and your own Razorpay TEST credentials. The following is a template; replace the placeholders with your own values.
+Create a local `.env` file using `.env.example` as a reference.
+
+Configure the MongoDB connection, JWT secret and Razorpay TEST credentials.
+
+### Step 5: Run the Application
+
+Check the available npm scripts:
+
+```bash
+npm run
+```
+
+Use the development command configured in `package.json`.
+
+## 13. Environment Configuration
+
+The application uses environment variables for database connectivity, authentication, payment integration and feature configuration.
+
+Example configuration:
+
+```env
 NODE_ENV=development
 PORT=3000
 
-# Use a development MongoDB database you control.
-# Include the intended database name in the connection URI.
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-host>/<your-development-database>?retryWrites=true&w=majority
+MONGODB_URI=your_mongodb_connection_string
 
-# Use a long, random, private value. Never commit it.
-JWT_SECRET=<your-long-random-jwt-secret>
+JWT_SECRET=your_secure_random_secret
 
-# Razorpay TEST credentials only. Never use live credentials for demo checkout.
-RAZORPAY_KEY_ID=rzp_test_<your-test-key-id>
-RAZORPAY_KEY_SECRET=<your-test-key-secret>
+RAZORPAY_KEY_ID=rzp_test_your_test_key_id
+RAZORPAY_KEY_SECRET=your_razorpay_test_secret
 
-# Keep demo checkout disabled unless you are deliberately testing it.
 DEMO_MODE_ENABLED=false
+
 PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED=false
+```
 
+**Important Security Guidelines**
 
-Environment Variable Safety
-- Never commit .env or publish database URIs, passwords, JWT secrets, or Razorpay secrets.
-- Keep .env out of Git. Use .env.example as a reference, not as a place for real credentials.
-- Do not point a local experiment at the production database. Use a separate development/test database.
-- Do not add secrets to frontend variables such as VITE_*; frontend variables are exposed to the browser.
-- The database name in MONGODB_URI matters. Include the intended database name in the URI path rather than relying on MongoDB's default database.
-4. Run the Project
-The exact scripts available in this repository are defined in package.json. List them with:
+- Never upload `.env` to GitHub.
+- Never expose database credentials.
+- Never publish JWT secrets.
+- Never expose Razorpay secret keys in frontend code.
+- Use separate database credentials for development and production.
+- Include the intended database name in the MongoDB connection URI.
+- Keep demo checkout disabled unless it is intentionally enabled with Razorpay TEST credentials.
+
+The values above are examples. Actual credentials must be configured privately in the local environment or deployment dashboard.
+
+## 14. Running the Application
+
+The application uses npm scripts configured in `package.json`.
+
+Useful development and validation commands include:
+
+```bash
 npm run
-
-
-Use the development script shown there to start the frontend/backend development environment. For a production-style server start, use the configured start script after following the project's build requirements.
-Useful Project Commands
-The following validation commands are configured in the project:
 npm test
 npm run lint
 npm run build
+```
 
+The available scripts can be checked using `npm run`.
 
-- npm test runs the automated test suite.
-- npm run lint checks code quality and TypeScript/lint rules configured by the project.
-- npm run build creates the production frontend build.
-Inventory and Checkout Rules
-AURA keeps physical inventory and demonstration inventory separate.
-Physical Purchases
-A physical purchase is allowed only when the product is active, its inventory status is explicitly verified, and sufficient physical stock is available. Physical stock is reserved through the backend's inventory workflow.
-TEST/DEMO Purchases
-A demo purchase uses the product's separate demoStock quantity. It must be clearly labelled as TEST/DEMO, must use Razorpay TEST credentials, and must never change physical stock or represent a promise to ship goods.
+The test command runs automated tests, the lint command checks code quality, and the build command creates the frontend production build.
 
-The production demo-checkout feature is off by default. The server-side flag is:
-PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED=false
+## 15. Testing and Validation
 
+Testing is performed to verify application functionality and important security-related behaviour.
 
-Only an authorised project operator should consider changing this setting to true, and only when the server has the matching Razorpay TEST key ID and secret. Never enable demo checkout with Razorpay live credentials. A TEST payment is not a real customer payment.
-Deployment
-The application is hosted on Render and connected to the GitHub repository.
+The project includes tests covering:
 
-For a deployment:
-1. Push the reviewed code to the configured GitHub branch.
-2. Allow Render's automatic deployment to complete.
-3. Configure production environment variables in the Render service settings (not in the repository).
-4. Use a production MongoDB URI with the intended database name in its path.
-5. Keep Razorpay in TEST mode for demonstrations and portfolio evaluation.
-6. Keep PRODUCTION_TEST_DEMO_CHECKOUT_ENABLED disabled unless the demo checkout has been intentionally reviewed and enabled.
-7. Check the service logs and health endpoint after deployment.
-Do not put credentials in this README, GitHub commits, screenshots, or frontend code.
-Security Notes
-- Customer and admin routes require the appropriate authentication/authorization.
-- Payment verification is performed on the server; frontend success alone must not be treated as proof of payment.
-- The server validates payment details such as the Razorpay signature, order association, amount, and currency.
-- Physical inventory verification is separate from demo-stock eligibility.
-- Demo/test orders must remain excluded from physical fulfilment.
-- Use separate development, test, and production databases where practical.
-Testing
-The project includes automated tests for backend routes and services, inventory rules, payment handling, and frontend presentation/checkout behaviour. Run the full suite before submitting changes:
+- Product presentation and purchase eligibility.
+- Inventory validation.
+- Demo inventory allocation.
+- Order creation.
+- Payment verification.
+- Customer and administrator functionality.
+- Email notifications.
+- Invoice generation.
+- Order confirmation.
+- Error handling.
+
+Run the validation commands before making changes available for deployment:
+
+```bash
 npm test
 npm run lint
 npm run build
+```
 
+## 16. Deployment
 
-Test results can change as the code evolves; run these commands against the current checkout before reporting a new result.
-Project Status
-AURA is an actively developed academic/portfolio project. The live site and payment demonstration are subject to the deployed configuration and inventory eligibility rules. Razorpay TEST mode is intended for demonstration, not real commercial transactions.
-Author and Contribution
-This repository is maintained as a student major project. For changes, create a branch, make a focused update, run the tests and lint checks, and submit a pull request or reviewed commit.
-License
-No open-source licence is specified in this repository. All rights remain with the repository owner unless a licence is added.
+AURA is hosted using Render and connected to its GitHub repository.
+
+### Deployment Workflow
+
+1. Maintain the project source code in GitHub.
+2. Commit and push reviewed code changes.
+3. Allow Render to detect the new GitHub commit.
+4. Wait for the deployment to finish.
+5. Configure the required environment variables in Render.
+6. Verify the backend health endpoint.
+7. Test the live frontend and backend functionality.
+
+**Live Application:**
+
+https://aura-store-e33i.onrender.com
+
+**Health Endpoint:**
+
+https://aura-store-e33i.onrender.com/api/health
+
+**GitHub Repository:**
+
+https://github.com/tejasrijallepalli750-crypto/major-project
+
+The production database and payment configuration must be checked before enabling purchasing functionality.
+
+## 17. Future Enhancements
+
+Potential future improvements include:
+
+- Advanced product recommendation functionality.
+- Improved filtering and sorting.
+- Enhanced customer analytics.
+- Improved order tracking.
+- Additional payment gateway options.
+- Better product discovery.
+- Performance optimisation for large product catalogues.
+- Enhanced administration and reporting features.
+- Additional automated integration tests.
+
+## 18. Learning Outcomes
+
+Developing AURA provides practical experience in:
+
+- Full-stack web application development.
+- React and TypeScript frontend development.
+- Node.js and Express backend development.
+- REST API design and implementation.
+- MongoDB database integration.
+- Authentication and authorization.
+- Inventory and order management.
+- Payment gateway integration.
+- Backend validation and security.
+- Automated testing.
+- Git and GitHub version control.
+- Cloud deployment using Render.
+
+## 19. Conclusion
+
+AURA demonstrates the development of a full-stack e-commerce application using modern web technologies.
+
+The project integrates frontend development, backend API implementation, MongoDB database management, customer authentication, inventory handling, order processing and Razorpay payment gateway testing.
+
+The application focuses on usability, secure transaction workflows, maintainable architecture and a practical online shopping experience.
+
+It provides an opportunity to apply full-stack development concepts to a real-world academic project while gaining practical experience with modern development tools and deployment platforms.
+
+---
+
+**Project Name:** AURA – E-Commerce Website with Payment Gateway
+
+**Project Type:** B.Tech Major Project
+
+**Repository:** https://github.com/tejasrijallepalli750-crypto/major-project
+
+**Deployment:** Render
